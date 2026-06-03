@@ -10,6 +10,7 @@
   libjpeg,
   libpng,
   libtiff,
+  llvmPackages,
   moltenvk,
   pkg-config,
   python3,
@@ -31,9 +32,15 @@ stdenv.mkDerivation {
 
   sourceRoot = "sources/wine";
 
+  patches = [
+    ../patches/winemac-arm64-metal-layer.patch
+  ];
+
   nativeBuildInputs = [
     bison
     flex
+    llvmPackages.lld
+    llvmPackages.llvm
     pkg-config
     python3
     xz
@@ -79,9 +86,21 @@ stdenv.mkDerivation {
   enableParallelBuilding = true;
 
   preConfigure = ''
-    export MACOSX_DEPLOYMENT_TARGET=11.0
+    mkdir -p "$TMPDIR/konyak-llvm-bin"
+    ln -sf ${llvmPackages.clang-unwrapped}/bin/clang "$TMPDIR/konyak-llvm-bin/clang"
+    ln -sf ${llvmPackages.lld}/bin/lld-link "$TMPDIR/konyak-llvm-bin/lld-link"
+    ln -sf ${llvmPackages.lld}/bin/ld.lld "$TMPDIR/konyak-llvm-bin/ld.lld"
+    ln -sf ${llvmPackages.llvm}/bin/llvm-ar "$TMPDIR/konyak-llvm-bin/llvm-ar"
+    ln -sf ${llvmPackages.llvm}/bin/llvm-dlltool "$TMPDIR/konyak-llvm-bin/llvm-dlltool"
+    ln -sf ${llvmPackages.llvm}/bin/llvm-ranlib "$TMPDIR/konyak-llvm-bin/llvm-ranlib"
+    export PATH="$TMPDIR/konyak-llvm-bin:$PATH"
+
+    export MACOSX_DEPLOYMENT_TARGET=14.0
     export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -Wno-error=implicit-function-declaration"
-    export NIX_LDFLAGS="$NIX_LDFLAGS -rpath ${moltenvk}/lib"
+    export NIX_LDFLAGS="$NIX_LDFLAGS -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
+    export aarch64_CC="${llvmPackages.clang-unwrapped}/bin/clang"
+    export CROSSCFLAGS="-g -O2"
+    export CROSSLDFLAGS=""
   '';
 
   configurePhase = ''
