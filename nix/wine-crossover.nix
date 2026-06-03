@@ -4,6 +4,7 @@
   fetchurl,
   bison,
   flex,
+  freetype,
   gettext,
   gnutls,
   libjpeg,
@@ -41,6 +42,7 @@ stdenv.mkDerivation {
 
   buildInputs = [
     gettext
+    freetype
     gnutls
     libjpeg
     libpng

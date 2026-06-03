@@ -21,7 +21,8 @@ On macOS:
 nix build .#konyak-macos-wine-runtime -L
 ```
 
-GitHub Actions runs the same build on GitHub-hosted macOS.
+GitHub Actions runs the same build on GitHub-hosted arm64 macOS and builds the
+`aarch64-darwin` package explicitly.
 
 ## Release Contract
 
