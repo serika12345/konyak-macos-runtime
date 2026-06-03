@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p dist
           tar -C result -caf dist/konyak-macos-dxmt.tar.zst .
-          KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+          KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download" \
             ./scripts/make-source-manifest.zsh \
               dist \
               dist/konyak-macos-wine-runtime.tar.zst \
