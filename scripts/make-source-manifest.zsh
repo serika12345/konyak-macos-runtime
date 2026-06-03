@@ -4,7 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 release_dir="${1:-$repo_root/result-release}"
 runtime_archive="${2:-}"
-dxmt_archive="${3:-}"
+shift 2 || true
+component_specs=("$@")
 
 if [[ -z "$runtime_archive" || ! -f "$runtime_archive" ]]; then
   echo "Usage: $0 <release-dir> <runtime-archive> [dxmt-archive]" >&2
@@ -22,6 +23,44 @@ if [[ -n "$asset_base_url" ]]; then
   archive_url="${asset_base_url%/}/$archive_name"
 fi
 
+component_version() {
+  local component_id="$1"
+  case "$component_id" in
+    dxmt)
+      echo "$(jq -r '.version' "$repo_root/sources/dxmt.json")-konyak.0"
+      ;;
+    dxvk-macos)
+      echo "v1.10.3-20230507"
+      ;;
+    moltenvk)
+      echo "v1.4.1"
+      ;;
+    gstreamer)
+      echo "nix-gstreamer"
+      ;;
+    wine-mono)
+      echo "wine-mono-11.1.0"
+      ;;
+    winetricks)
+      echo "20260125"
+      ;;
+    *)
+      echo "unknown"
+      ;;
+  esac
+}
+
+component_archive_url() {
+  local archive_path="$1"
+  local archive_name
+  archive_name="$(basename "$archive_path")"
+  local url="$archive_name"
+  if [[ -n "$asset_base_url" ]]; then
+    url="${asset_base_url%/}/$archive_name"
+  fi
+  echo "$url"
+}
+
 components_json="$(
   jq -n \
     --arg archive "$archive_url" \
@@ -35,32 +74,34 @@ components_json="$(
     }]'
 )"
 
-if [[ -n "$dxmt_archive" ]]; then
-  if [[ ! -f "$dxmt_archive" ]]; then
-    echo "DXMT archive does not exist: $dxmt_archive" >&2
+for spec in "${component_specs[@]}"; do
+  component_id="${spec%%=*}"
+  component_archive="${spec#*=}"
+  if [[ "$component_id" == "$component_archive" ]]; then
+    component_id="dxmt"
+  fi
+  if [[ ! -f "$component_archive" ]]; then
+    echo "Component archive does not exist for $component_id: $component_archive" >&2
     exit 66
   fi
 
-  dxmt_archive_name="$(basename "$dxmt_archive")"
-  dxmt_sha256="$(shasum -a 256 "$dxmt_archive" | awk '{ print $1 }')"
-  dxmt_url="$dxmt_archive_name"
-  if [[ -n "$asset_base_url" ]]; then
-    dxmt_url="${asset_base_url%/}/$dxmt_archive_name"
-  fi
-  dxmt_version="$(jq -r '.version' "$repo_root/sources/dxmt.json")-konyak.0"
+  component_sha256="$(shasum -a 256 "$component_archive" | awk '{ print $1 }')"
+  component_url="$(component_archive_url "$component_archive")"
+  component_archive_version="$(component_version "$component_id")"
   components_json="$(
     jq \
-      --arg archive "$dxmt_url" \
-      --arg sha256 "$dxmt_sha256" \
-      --arg version "$dxmt_version" \
+      --arg id "$component_id" \
+      --arg archive "$component_url" \
+      --arg sha256 "$component_sha256" \
+      --arg version "$component_archive_version" \
       '. + [{
-        id: "dxmt",
+        id: $id,
         version: $version,
         archiveUrl: $archive,
         sha256: $sha256
       }]' <<<"$components_json"
   )"
-fi
+done
 
 jq -n \
   --argjson components "$components_json" \
