@@ -40,8 +40,17 @@ jobs:
 
       - name: Install Metal toolchain
         run: |
-          xcodebuild -downloadComponent MetalToolchain
-          echo "KONYAK_METAL_TOOLCHAIN_BIN=$(dirname "$(/usr/bin/xcrun -sdk macosx -find metal)")" >> "$GITHUB_ENV"
+          if ! /usr/bin/xcrun -sdk macosx -find metal >/dev/null 2>&1; then
+            if xcodebuild -help 2>&1 | grep -q -- "-downloadComponent"; then
+              xcodebuild -downloadComponent MetalToolchain
+            fi
+          fi
+
+          metal_path="$(/usr/bin/xcrun -sdk macosx -find metal)"
+          metallib_path="$(/usr/bin/xcrun -sdk macosx -find metallib)"
+          echo "Metal: $metal_path"
+          echo "Metallib: $metallib_path"
+          echo "KONYAK_METAL_TOOLCHAIN_BIN=$(dirname "$metal_path")" >> "$GITHUB_ENV"
 
       - name: Build DXMT component
         run: nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace
