@@ -1,0 +1,32 @@
+name: Update CrossOver source
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Update source pin
+        run: ./scripts/update-crossover.zsh
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/update-crossover-source
+          title: Update CrossOver source pin
+          commit-message: Update CrossOver source pin
+          body: |
+            Automated update of `sources/crossover.json`.
