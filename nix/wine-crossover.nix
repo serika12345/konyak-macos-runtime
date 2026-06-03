@@ -79,7 +79,7 @@ stdenv.mkDerivation {
   preConfigure = ''
     export MACOSX_DEPLOYMENT_TARGET=11.0
     export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -Wno-error=implicit-function-declaration"
-    export NIX_LDFLAGS="$NIX_LDFLAGS -Wl,-rpath,${moltenvk}/lib"
+    export NIX_LDFLAGS="$NIX_LDFLAGS -rpath ${moltenvk}/lib"
   '';
 
   configurePhase = ''
