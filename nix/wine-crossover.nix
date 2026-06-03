@@ -82,6 +82,20 @@ stdenv.mkDerivation {
     export NIX_LDFLAGS="$NIX_LDFLAGS -Wl,-rpath,${moltenvk}/lib"
   '';
 
+  configurePhase = ''
+    runHook preConfigure
+    echo "configure flags: $configureFlags"
+    if ! ./configure $configureFlags; then
+      if [ -f config.log ]; then
+        echo "----- config.log -----"
+        cat config.log
+        echo "----- end config.log -----"
+      fi
+      exit 1
+    fi
+    runHook postConfigure
+  '';
+
   postInstall = ''
     mkdir -p "$out/Licenses"
     cp COPYING.LIB "$out/Licenses/Wine-LGPL-2.1-or-later.txt"
