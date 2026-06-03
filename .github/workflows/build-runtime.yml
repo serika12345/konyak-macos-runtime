@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build CrossOver-derived Wine runtime
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 360
     steps:
       - name: Checkout
@@ -29,18 +29,41 @@ jobs:
         run: nix flake check -L --show-trace
 
       - name: Build runtime
-        run: nix build .#packages.aarch64-darwin.konyak-macos-wine-runtime -L --show-trace
+        run: nix build .#packages.x86_64-darwin.konyak-macos-wine-runtime -L --show-trace
 
-      - name: Package result
+      - name: Package Wine runtime
         if: success()
         run: |
           mkdir -p dist
           tar -C result -caf dist/konyak-macos-wine-runtime.tar.zst .
           ./scripts/make-source-manifest.zsh dist dist/konyak-macos-wine-runtime.tar.zst
 
+      - name: Install Metal toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          echo "KONYAK_METAL_TOOLCHAIN_BIN=$(dirname "$(/usr/bin/xcrun -sdk macosx -find metal)")" >> "$GITHUB_ENV"
+
+      - name: Build DXMT component
+        run: nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace
+
+      - name: Package DXMT component
+        if: success()
+        run: |
+          mkdir -p dist
+          tar -C result -caf dist/konyak-macos-dxmt.tar.zst .
+
       - name: Upload runtime artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: konyak-macos-wine-runtime
-          path: dist/*
+          path: |
+            dist/konyak-macos-wine-runtime.tar.zst
+            dist/konyak-macos-wine-runtime-stack-source.json
+
+      - name: Upload DXMT artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist/konyak-macos-dxmt.tar.zst

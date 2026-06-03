@@ -21,8 +21,18 @@ On macOS:
 nix build .#konyak-macos-wine-runtime -L
 ```
 
-GitHub Actions runs the same build on GitHub-hosted arm64 macOS and builds the
-`aarch64-darwin` package explicitly.
+GitHub Actions runs the same build on GitHub-hosted Intel macOS and builds the
+`x86_64-darwin` package explicitly. This matches CrossOver's macOS Wine runtime
+layout, including `lib/wine/x86_64-unix` and `lib/wine/x86_64-windows`.
+
+DXMT additionally needs Apple's Metal Toolchain, which is provided by Xcode
+outside the Nix store. Before building DXMT locally:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+export KONYAK_METAL_TOOLCHAIN_BIN="$(dirname "$(/usr/bin/xcrun -sdk macosx -find metal)")"
+nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L
+```
 
 ## Release Contract
 

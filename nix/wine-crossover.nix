@@ -6,15 +6,17 @@
   flex,
   freetype,
   gettext,
+  gst_all_1,
   gnutls,
+  libpcap,
   libjpeg,
   libpng,
   libtiff,
-  llvmPackages,
   moltenvk,
   pkg-config,
   python3,
   SDL2,
+  llvmPackages,
   xz,
   zlib,
   zstd,
@@ -32,10 +34,6 @@ stdenv.mkDerivation {
 
   sourceRoot = "sources/wine";
 
-  patches = [
-    ../patches/winemac-arm64-metal-layer.patch
-  ];
-
   nativeBuildInputs = [
     bison
     flex
@@ -50,7 +48,10 @@ stdenv.mkDerivation {
   buildInputs = [
     gettext
     freetype
+    gst_all_1.gstreamer
+    gst_all_1.gst-plugins-base
     gnutls
+    libpcap
     libjpeg
     libpng
     libtiff
@@ -79,6 +80,8 @@ stdenv.mkDerivation {
     "--without-x"
     "--with-freetype"
     "--with-gnutls"
+    "--with-gstreamer"
+    "--with-pcap"
     "--with-sdl"
     "--with-vulkan"
   ];
@@ -86,21 +89,37 @@ stdenv.mkDerivation {
   enableParallelBuilding = true;
 
   preConfigure = ''
+    export MACOSX_DEPLOYMENT_TARGET=14.0
+
+    # DXMT's upstream cross file links with mingw ld.bfd. Wine's PE static
+    # libraries default to lld-link /lib archives, which expose symbols to nm
+    # but are not pulled correctly by ld.bfd. Build those static libraries with
+    # ar so the exported runtime can be consumed by DXMT without a custom linker.
+    substituteInPlace tools/winebuild/import.c \
+      --replace-fail 'if (!create || target.platform != PLATFORM_WINDOWS)' 'if (1)' \
+      --replace-fail 'strarray_add( &args, create ? "rc" : "r" );' 'strarray_add( &args, create ? "rcs" : "rs" );'
+
     mkdir -p "$TMPDIR/konyak-llvm-bin"
     ln -sf ${llvmPackages.clang-unwrapped}/bin/clang "$TMPDIR/konyak-llvm-bin/clang"
     ln -sf ${llvmPackages.lld}/bin/lld-link "$TMPDIR/konyak-llvm-bin/lld-link"
     ln -sf ${llvmPackages.lld}/bin/ld.lld "$TMPDIR/konyak-llvm-bin/ld.lld"
-    ln -sf ${llvmPackages.llvm}/bin/llvm-ar "$TMPDIR/konyak-llvm-bin/llvm-ar"
+    cat > "$TMPDIR/konyak-llvm-bin/llvm-ar" <<EOF
+#!/bin/sh
+exec ${llvmPackages.llvm}/bin/llvm-ar --format=gnu "\$@"
+EOF
+    chmod +x "$TMPDIR/konyak-llvm-bin/llvm-ar"
     ln -sf ${llvmPackages.llvm}/bin/llvm-dlltool "$TMPDIR/konyak-llvm-bin/llvm-dlltool"
     ln -sf ${llvmPackages.llvm}/bin/llvm-ranlib "$TMPDIR/konyak-llvm-bin/llvm-ranlib"
     export PATH="$TMPDIR/konyak-llvm-bin:$PATH"
 
-    export MACOSX_DEPLOYMENT_TARGET=14.0
-    export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -Wno-error=implicit-function-declaration"
-    export NIX_LDFLAGS="$NIX_LDFLAGS -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
-    export aarch64_CC="${llvmPackages.clang-unwrapped}/bin/clang"
+    export x86_64_CC=${llvmPackages.clang-unwrapped}/bin/clang
     export CROSSCFLAGS="-g -O2"
     export CROSSLDFLAGS=""
+
+    export CPPFLAGS="$CPPFLAGS -I${libpcap}/include"
+    export LDFLAGS="$LDFLAGS -L${libpcap}/lib"
+    export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I${libpcap}/include -Wno-error=implicit-function-declaration"
+    export NIX_LDFLAGS="$NIX_LDFLAGS -L${libpcap}/lib -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
   '';
 
   configurePhase = ''
