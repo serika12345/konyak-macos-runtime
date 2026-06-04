@@ -6,6 +6,23 @@ dist_dir="${1:-$repo_root/dist}"
 gstreamer_root="${2:-}"
 cache_dir="${KONYAK_COMPONENT_DOWNLOAD_CACHE:-$repo_root/.component-cache}"
 
+resolve_gnu_tar() {
+  if command -v gtar >/dev/null 2>&1; then
+    command -v gtar
+    return 0
+  fi
+
+  if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+    command -v tar
+    return 0
+  fi
+
+  echo "GNU tar is required. Run through nix shell nixpkgs#gnutar or install gtar." >&2
+  return 1
+}
+
+readonly tar_bin="$(resolve_gnu_tar)"
+
 readonly dxvk_version="v1.10.3-20230507"
 readonly dxvk_url="https://github.com/Gcenx/DXVK-macOS/releases/download/v1.10.3-20230507/dxvk-macOS-async-v1.10.3-20230507.tar.gz"
 readonly dxvk_sha256="f67d99d0a8eeedd7d406b283a3df9f939b5965acb00efcb33d0c6235c195a516"
@@ -77,7 +94,7 @@ archive_payload() {
   local archive_path="$2"
 
   rm -f "$archive_path"
-  tar \
+  "$tar_bin" \
     --sort=name \
     --owner=0 \
     --group=0 \
@@ -97,8 +114,11 @@ package_dxvk_macos() {
 
   download_if_missing "$dxvk_url" "$archive_cache" "$dxvk_sha256"
   reset_dir "$work_root"
-  mkdir -p "$extract_root" "$payload_root/DXVK/x64" "$payload_root/DXVK/x32"
-  tar --warning=no-unknown-keyword -xzf "$archive_cache" -C "$extract_root"
+  mkdir -p \
+    "$extract_root" \
+    "$payload_root/lib/dxvk/x86_64-windows" \
+    "$payload_root/lib/dxvk/i386-windows"
+  "$tar_bin" --warning=no-unknown-keyword -xzf "$archive_cache" -C "$extract_root"
 
   for dll_name in dxgi.dll d3d9.dll d3d10core.dll d3d11.dll; do
     local source_x64
@@ -109,8 +129,8 @@ package_dxvk_macos() {
       echo "DXVK-macOS archive does not contain x64/x32 $dll_name." >&2
       exit 65
     fi
-    cp -f "$source_x64" "$payload_root/DXVK/x64/$dll_name"
-    cp -f "$source_x32" "$payload_root/DXVK/x32/$dll_name"
+    cp -f "$source_x64" "$payload_root/lib/dxvk/x86_64-windows/$dll_name"
+    cp -f "$source_x32" "$payload_root/lib/dxvk/i386-windows/$dll_name"
   done
 
   write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "dxvk-macos" "$dxvk_version"
@@ -128,7 +148,7 @@ package_moltenvk() {
   download_if_missing "$moltenvk_url" "$archive_cache" "$moltenvk_sha256"
   reset_dir "$work_root"
   mkdir -p "$extract_root" "$payload_root/lib"
-  tar -xf "$archive_cache" -C "$extract_root"
+  "$tar_bin" -xf "$archive_cache" -C "$extract_root"
   source_dylib="$(find "$extract_root" -path '*/dynamic/dylib/macOS/libMoltenVK.dylib' -type f | head -n 1)"
   if [[ -z "$source_dylib" ]]; then
     echo "MoltenVK archive does not contain macOS libMoltenVK.dylib." >&2

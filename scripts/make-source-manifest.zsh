@@ -8,7 +8,7 @@ shift 2 || true
 component_specs=("$@")
 
 if [[ -z "$runtime_archive" || ! -f "$runtime_archive" ]]; then
-  echo "Usage: $0 <release-dir> <runtime-archive> [dxmt-archive]" >&2
+  echo "Usage: $0 <release-dir> <runtime-archive> [component-id=archive ...]" >&2
   exit 64
 fi
 

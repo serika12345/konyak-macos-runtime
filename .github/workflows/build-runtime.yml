@@ -79,8 +79,8 @@ jobs:
         if: success()
         run: |
           mkdir -p dist
-          mkdir -p dist/dxmt-component/components/dxmt
-          cp -R result/. dist/dxmt-component/components/dxmt/
+          mkdir -p dist/dxmt-component/lib/dxmt
+          cp -R result/. dist/dxmt-component/lib/dxmt/
           nix shell nixpkgs#gnutar -c tar \
             --sort=name \
             --owner=0 \
@@ -103,7 +103,7 @@ jobs:
       - name: Generate release metadata
         if: success()
         run: |
-          KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download" \
+          KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${KONYAK_RUNTIME_RELEASE_TAG}" \
             ./scripts/make-source-manifest.zsh \
               dist \
               dist/konyak-macos-wine-runtime.tar.zst \
