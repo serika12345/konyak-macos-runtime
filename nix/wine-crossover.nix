@@ -13,6 +13,7 @@
   libpng,
   libtiff,
   moltenvk,
+  perl,
   pkg-config,
   python3,
   SDL2,
@@ -23,6 +24,9 @@
   crossoverSource,
 }:
 
+let
+  supportsExternalGptkD3DMetal = stdenv.hostPlatform.isDarwin && stdenv.hostPlatform.isx86_64;
+in
 stdenv.mkDerivation {
   pname = "konyak-macos-wine-runtime";
   version = "crossover-${crossoverSource.version}-konyak.0";
@@ -39,6 +43,7 @@ stdenv.mkDerivation {
     flex
     llvmPackages.lld
     llvmPackages.llvm
+    perl
     pkg-config
     python3
     xz
@@ -99,6 +104,20 @@ stdenv.mkDerivation {
       --replace-fail 'if (!create || target.platform != PLATFORM_WINDOWS)' 'if (1)' \
       --replace-fail 'strarray_add( &args, create ? "rc" : "r" );' 'strarray_add( &args, create ? "rcs" : "rs" );'
 
+    # CrossOver's macOS D3DMetal layer is x86_64-only. The Konyak runtime is
+    # built on arm64-darwin too, so keep the Wine mac driver buildable there.
+    substituteInPlace dlls/winemac.drv/cocoa_window.m \
+      --replace-fail '        CAMetalLayer *layer = [WineMetalLayer layer];   /* CW HACK 22435 */' \
+        '        CAMetalLayer *layer;
+#if defined(__x86_64__)
+        layer = [WineMetalLayer layer];   /* CW HACK 22435 */
+#else
+        layer = [CAMetalLayer layer];
+#endif'
+
+    perl -0pi -e 's/\n#endif\n\z/\n#else\n\n#include "config.h"\n#include "macdrv.h"\n\nvoid macdrv_client_surface_presented(const macdrv_event *event)\n{\n}\n\n#endif\n/' \
+      dlls/winemac.drv/d3dmetal.c
+
     mkdir -p "$TMPDIR/konyak-llvm-bin"
     ln -sf ${llvmPackages.clang-unwrapped}/bin/clang "$TMPDIR/konyak-llvm-bin/clang"
     ln -sf ${llvmPackages.lld}/bin/lld-link "$TMPDIR/konyak-llvm-bin/lld-link"
@@ -137,6 +156,27 @@ EOF
   '';
 
   postInstall = ''
+    ntdll_unix="$(find "$out/lib/wine" -path '*/ntdll.so' -type f | head -n 1)"
+    if [ -z "$ntdll_unix" ]; then
+      echo "Missing Wine Unix ntdll under: $out/lib/wine" >&2
+      exit 1
+    fi
+
+    if ${lib.boolToString supportsExternalGptkD3DMetal}; then
+      for required_gptk_hook in \
+        "CX_APPLEGPTK_LIBD3DSHARED_PATH" \
+        "Loading libd3dshared.dylib failed" \
+        "Loaded libd3dshared.dylib"
+      do
+        if ! strings "$ntdll_unix" | grep -F "$required_gptk_hook" >/dev/null; then
+          echo "Wine Unix ntdll is missing GPTK/D3DMetal hook string: $required_gptk_hook" >&2
+          exit 1
+        fi
+      done
+
+      mkdir -p "$out/lib/external"
+    fi
+
     mkdir -p "$out/Licenses"
     cp COPYING.LIB "$out/Licenses/Wine-LGPL-2.1-or-later.txt"
     cat >"$out/SOURCE.txt" <<EOF
@@ -147,6 +187,7 @@ CrossOver source URL: ${crossoverSource.url}
 CrossOver source hash: ${crossoverSource.hash}
 Build recipe: Nix flake in serika12345/konyak-macos-runtime
 GPTK/D3DMetal: not included
+External GPTK/D3DMetal import: ${if supportsExternalGptkD3DMetal then "supported when supplied by the user" else "not supported by this architecture"}
 EOF
     cat >"$out/build-info.json" <<EOF
 {
@@ -158,7 +199,46 @@ EOF
     "url": "${crossoverSource.url}",
     "hash": "${crossoverSource.hash}"
   },
-  "containsGptkD3DMetal": false
+  "containsGptkD3DMetal": false,
+  "supportsExternalGptkD3DMetal": ${builtins.toJSON supportsExternalGptkD3DMetal},
+  "externalGptkD3DMetal": {
+    "loaderEnvironmentVariable": "CX_APPLEGPTK_LIBD3DSHARED_PATH",
+    "importMode": "overlay",
+    "sourceRoot": "redist",
+    "runtimeRoot": ".",
+    "requiredPaths": [
+      "lib/external/D3DMetal.framework",
+      "lib/external/libd3dshared.dylib",
+      "lib/wine/x86_64-windows/atidxx64.dll",
+      "lib/wine/x86_64-windows/d3d10.dll",
+      "lib/wine/x86_64-windows/d3d11.dll",
+      "lib/wine/x86_64-windows/d3d12.dll",
+      "lib/wine/x86_64-windows/dxgi.dll",
+      "lib/wine/x86_64-windows/nvapi64.dll",
+      "lib/wine/x86_64-windows/nvngx-on-metalfx.dll",
+      "lib/wine/x86_64-unix/atidxx64.so",
+      "lib/wine/x86_64-unix/d3d10.so",
+      "lib/wine/x86_64-unix/d3d11.so",
+      "lib/wine/x86_64-unix/d3d12.so",
+      "lib/wine/x86_64-unix/dxgi.so",
+      "lib/wine/x86_64-unix/nvapi64.so",
+      "lib/wine/x86_64-unix/nvngx-on-metalfx.so"
+    ],
+    "requiredSymlinks": [
+      {
+        "path": "lib/wine/x86_64-unix/d3d11.so",
+        "target": "../../external/libd3dshared.dylib"
+      },
+      {
+        "path": "lib/wine/x86_64-unix/d3d12.so",
+        "target": "../../external/libd3dshared.dylib"
+      },
+      {
+        "path": "lib/wine/x86_64-unix/dxgi.so",
+        "target": "../../external/libd3dshared.dylib"
+      }
+    ]
+  }
 }
 EOF
   '';

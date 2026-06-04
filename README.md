@@ -45,3 +45,22 @@ Runtime archives must include:
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.
+
+The x86_64 Wine runtime is built with the CrossOver GPTK/D3DMetal loader hook
+and advertises `"supportsExternalGptkD3DMetal": true` in `build-info.json`.
+The aarch64 Wine build does not expose that hook because CrossOver's GPTK
+loader path is x86_64/Rosetta-specific. The expected user-imported payload
+layout and launch environment are documented in
+`docs/gptk-d3dmetal-import-contract.md`.
+
+To import Apple GPTK/D3DMetal into a writable runtime copy:
+
+```sh
+scripts/import-gptk-d3dmetal-redist.zsh \
+  /path/to/Game_Porting_Toolkit_3.0.dmg \
+  /path/to/konyak-macos-wine-runtime
+```
+
+The import script overlays the nested GPTK `redist` payload into Wine's
+standard `lib/external` and `lib/wine/x86_64-*` locations and preserves the
+required D3DMetal symlinks.
