@@ -18,12 +18,19 @@ The pinned CrossOver source is tracked in `sources/crossover.json`.
 On macOS:
 
 ```sh
-nix build .#konyak-macos-wine-runtime -L
+nix build .#packages.x86_64-darwin.konyak-macos-wine-runtime -L
 ```
 
 GitHub Actions runs the same build on GitHub-hosted Intel macOS and builds the
 `x86_64-darwin` package explicitly. This matches CrossOver's macOS Wine runtime
-layout, including `lib/wine/x86_64-unix` and `lib/wine/x86_64-windows`.
+layout, including `lib/wine/i386-windows`, `lib/wine/x86_64-windows`, and
+`lib/wine/x86_64-unix`. The runtime uses Wine32-on-64 for 32-bit Windows
+executables; `lib/wine/i386-unix` is not expected.
+
+Local default builds may follow the host architecture, but release artifacts
+must use the explicit `x86_64-darwin` package above so the parent Konyak
+repository can validate one runtime layout from the submodule-produced
+artifact.
 
 DXMT additionally needs Apple's Metal Toolchain, which is provided by Xcode
 outside the Nix store. Before building DXMT locally:
@@ -41,6 +48,7 @@ Runtime archives must include:
 - `Licenses/`
 - `SOURCE.txt`
 - `build-info.json`
+- Wine32-on-64 payload for 32-bit Windows executables
 - a Konyak-compatible runtime stack source manifest
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included

@@ -18,8 +18,11 @@ backends instead of implicit runtime overwrites.
 
 ```text
 runtime/
+  bin/wine
   bin/wine64
-  lib/wine/...
+  lib/wine/i386-windows/...
+  lib/wine/x86_64-windows/...
+  lib/wine/x86_64-unix/...
   components/
     dxvk/
     dxmt/
@@ -33,7 +36,7 @@ runtime/
 
 ## Implementation Checklist
 
-- [ ] Build and package CrossOver-derived Wine in Konyak runtime layout.
+- [x] Build and package CrossOver-derived Wine in Konyak runtime layout.
 - [ ] Ensure local `macos-vulkan-wine-smoke` passes with that Wine.
 - [ ] Add a Nix DXMT package that builds locally on macOS before Actions.
 - [ ] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's

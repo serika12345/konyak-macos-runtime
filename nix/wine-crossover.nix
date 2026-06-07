@@ -26,6 +26,14 @@
 
 let
   supportsExternalGptkD3DMetal = stdenv.hostPlatform.isDarwin && stdenv.hostPlatform.isx86_64;
+  wineUnixArch = "${stdenv.hostPlatform.parsed.cpu.name}-unix";
+  wine32On64RequiredPaths = [
+    "lib/wine/i386-windows/ntdll.dll"
+    "lib/wine/x86_64-windows/wow64.dll"
+    "lib/wine/x86_64-windows/wow64cpu.dll"
+    "lib/wine/x86_64-windows/wow64win.dll"
+    "lib/wine/${wineUnixArch}/ntdll.so"
+  ];
 in
 stdenv.mkDerivation {
   pname = "konyak-macos-wine-runtime";
@@ -67,7 +75,7 @@ stdenv.mkDerivation {
 
   configureFlags = [
     "--prefix=${placeholder "out"}"
-    "--enable-win64"
+    "--enable-archs=i386,x86_64"
     "--disable-tests"
     "--disable-win16"
     "--without-alsa"
@@ -132,6 +140,7 @@ EOF
     export PATH="$TMPDIR/konyak-llvm-bin:$PATH"
 
     export x86_64_CC=${llvmPackages.clang-unwrapped}/bin/clang
+    export i386_CC=${llvmPackages.clang-unwrapped}/bin/clang
     export CROSSCFLAGS="-g -O2"
     export CROSSLDFLAGS=""
 
@@ -177,6 +186,18 @@ EOF
       mkdir -p "$out/lib/external"
     fi
 
+    for required_wine32on64_path in ${lib.escapeShellArgs wine32On64RequiredPaths}; do
+      if [ ! -e "$out/$required_wine32on64_path" ]; then
+        echo "Missing Wine32-on-64 runtime path: $required_wine32on64_path" >&2
+        exit 1
+      fi
+    done
+
+    if [ -e "$out/lib/wine/i386-unix/ntdll.so" ]; then
+      echo "Unexpected i386 Unix Wine host path in Wine32-on-64 runtime." >&2
+      exit 1
+    fi
+
     mkdir -p "$out/Licenses"
     cp COPYING.LIB "$out/Licenses/Wine-LGPL-2.1-or-later.txt"
     cat >"$out/SOURCE.txt" <<EOF
@@ -200,6 +221,14 @@ EOF
     "hash": "${crossoverSource.hash}"
   },
   "containsGptkD3DMetal": false,
+  "supportsWine32On64": true,
+  "wine32On64": {
+    "runtimeLayout": "${wineUnixArch}-host-with-i386-windows",
+    "requiresI386UnixHost": false,
+    "requiredPaths": [
+${lib.concatMapStringsSep ",\n" (path: "      \"${path}\"") wine32On64RequiredPaths}
+    ]
+  },
   "supportsExternalGptkD3DMetal": ${builtins.toJSON supportsExternalGptkD3DMetal},
   "externalGptkD3DMetal": {
     "loaderEnvironmentVariable": "CX_APPLEGPTK_LIBD3DSHARED_PATH",

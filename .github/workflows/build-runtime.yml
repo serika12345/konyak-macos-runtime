@@ -44,6 +44,9 @@ jobs:
           echo "KONYAK_RUNTIME_RELEASE_TAG=$runtime_version" >> "$GITHUB_ENV"
           echo "KONYAK_RUNTIME_RELEASE_TITLE=Konyak macOS runtime $runtime_version" >> "$GITHUB_ENV"
 
+      - name: Verify Wine32-on-64 runtime payload
+        run: ./scripts/check-wine32on64-runtime.zsh result
+
       - name: Package Wine runtime
         if: success()
         run: |
