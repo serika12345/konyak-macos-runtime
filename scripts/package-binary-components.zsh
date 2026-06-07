@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 dist_dir="${1:-$repo_root/dist}"
 gstreamer_root="${2:-}"
+freetype_root="${3:-}"
 cache_dir="${KONYAK_COMPONENT_DOWNLOAD_CACHE:-$repo_root/.component-cache}"
 
 resolve_gnu_tar() {
@@ -39,8 +40,9 @@ readonly winetricks_version="20260125"
 readonly winetricks_url="https://raw.githubusercontent.com/Winetricks/winetricks/20260125/src/winetricks"
 readonly winetricks_sha256="431f82fc74000e6c864409f1d8fb495d696c03928808e3e8acffc45179312a7b"
 
-if [[ -z "$gstreamer_root" || ! -d "$gstreamer_root" ]]; then
-  echo "Usage: $0 <dist-dir> <gstreamer-root>" >&2
+if [[ -z "$gstreamer_root" || ! -d "$gstreamer_root" ||
+      -z "$freetype_root" || ! -d "$freetype_root" ]]; then
+  echo "Usage: $0 <dist-dir> <gstreamer-root> <freetype-root>" >&2
   exit 64
 fi
 
@@ -103,6 +105,45 @@ archive_payload() {
     -C "$payload_root" \
     -caf "$archive_path" \
     .
+}
+
+copy_nix_dylib_closure() {
+  local source_path="$1"
+  local target_dir="$2"
+  local file_name="${source_path:t}"
+  local target_path="${target_dir}/${file_name}"
+  local dependency
+  local dependency_file_name
+
+  if [[ ! -f "$source_path" ]]; then
+    echo "dylib not found: $source_path" >&2
+    exit 65
+  fi
+
+  if [[ -f "$target_path" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$target_dir"
+  cp -Lf "$source_path" "$target_path"
+  chmod u+w "$target_path"
+  install_name_tool -id "@rpath/$file_name" "$target_path" 2>/dev/null || true
+
+  otool -L "$source_path" |
+    awk 'NR > 1 { print $1 }' |
+    while IFS= read -r dependency; do
+      if [[ "$dependency" == "$source_path" ||
+            "$dependency" != /nix/store/* ||
+            "$dependency" != *.dylib ]]; then
+        continue
+      fi
+
+      copy_nix_dylib_closure "$dependency" "$target_dir"
+      dependency_file_name="${dependency:t}"
+      install_name_tool \
+        -change "$dependency" "@loader_path/$dependency_file_name" \
+        "$target_path"
+    done
 }
 
 package_dxvk_macos() {
@@ -177,6 +218,22 @@ package_gstreamer() {
   archive_payload "$payload_root" "$archive_path"
 }
 
+package_freetype() {
+  local payload_root="$dist_dir/work/freetype/payload"
+  local archive_path="$dist_dir/konyak-macos-freetype.tar.zst"
+  local source_dylib="$freetype_root/lib/libfreetype.6.dylib"
+
+  if [[ ! -f "$source_dylib" ]]; then
+    echo "FreeType dylib not found: $source_dylib" >&2
+    exit 65
+  fi
+
+  reset_dir "$dist_dir/work/freetype"
+  copy_nix_dylib_closure "$source_dylib" "$payload_root/lib"
+  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "freetype" "$(basename "$freetype_root")"
+  archive_payload "$payload_root" "$archive_path"
+}
+
 package_wine_mono() {
   local archive_cache="$cache_dir/wine-mono-$wine_mono_version-x86.msi"
   local payload_root="$dist_dir/work/wine-mono/payload"
@@ -207,6 +264,7 @@ package_winetricks() {
 package_dxvk_macos
 package_moltenvk
 package_gstreamer
+package_freetype
 package_wine_mono
 package_winetricks
 

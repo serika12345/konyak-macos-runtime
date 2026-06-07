@@ -38,6 +38,9 @@ component_version() {
     gstreamer)
       echo "nix-gstreamer"
       ;;
+    freetype)
+      echo "nix-freetype"
+      ;;
     wine-mono)
       echo "wine-mono-11.1.0"
       ;;

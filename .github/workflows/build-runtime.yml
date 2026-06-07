@@ -95,10 +95,12 @@ jobs:
         if: success()
         run: |
           gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#gst_all_1.gstreamer.out)"
+          freetype_root="$(nix build --no-link --print-out-paths nixpkgs#freetype.out)"
           nix shell nixpkgs#gnutar -c \
             ./scripts/package-binary-components.zsh \
               dist \
-              "$gstreamer_root"
+              "$gstreamer_root" \
+              "$freetype_root"
 
       - name: Generate release metadata
         if: success()
@@ -111,6 +113,7 @@ jobs:
               dxvk-macos=dist/konyak-macos-dxvk-macos.tar.zst \
               moltenvk=dist/konyak-macos-moltenvk.tar.zst \
               gstreamer=dist/konyak-macos-gstreamer.tar.zst \
+              freetype=dist/konyak-macos-freetype.tar.zst \
               wine-mono=dist/konyak-macos-wine-mono.tar.zst \
               winetricks=dist/konyak-macos-winetricks.tar.zst
 
@@ -125,6 +128,7 @@ jobs:
             dist/konyak-macos-dxvk-macos.tar.zst
             dist/konyak-macos-moltenvk.tar.zst
             dist/konyak-macos-gstreamer.tar.zst
+            dist/konyak-macos-freetype.tar.zst
             dist/konyak-macos-wine-mono.tar.zst
             dist/konyak-macos-winetricks.tar.zst
             dist/konyak-macos-wine-runtime-stack-source.json
@@ -154,6 +158,7 @@ jobs:
             dist/konyak-macos-dxvk-macos.tar.zst
             dist/konyak-macos-moltenvk.tar.zst
             dist/konyak-macos-gstreamer.tar.zst
+            dist/konyak-macos-freetype.tar.zst
             dist/konyak-macos-wine-mono.tar.zst
             dist/konyak-macos-winetricks.tar.zst
             dist/konyak-macos-wine-runtime-stack-source.json
