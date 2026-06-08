@@ -14,12 +14,16 @@ runtime_root="$(cd "$runtime_root" && pwd -P)"
 wine_executable="$runtime_root/bin/wine"
 wineserver_executable="$runtime_root/bin/wineserver"
 target_executable="$runtime_root/lib/wine/i386-windows/cmd.exe"
+prefix_init_executable="$runtime_root/lib/wine/x86_64-windows/cmd.exe"
 
 required_paths=(
   "$wine_executable"
   "$wineserver_executable"
+  "$prefix_init_executable"
   "$target_executable"
+  "$runtime_root/lib/wine/i386-windows/kernel32.dll"
   "$runtime_root/lib/wine/i386-windows/ntdll.dll"
+  "$runtime_root/lib/wine/x86_64-windows/kernel32.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64cpu.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64win.dll"
@@ -54,6 +58,9 @@ prefix="$work_root/prefix"
 stdout_path="$work_root/stdout.log"
 stderr_path="$work_root/stderr.log"
 exit_status_path="$work_root/exit-status"
+prefix_init_stdout_path="$work_root/prefix-init-stdout.log"
+prefix_init_stderr_path="$work_root/prefix-init-stderr.log"
+prefix_init_exit_status_path="$work_root/prefix-init-exit-status"
 smoke_pid=""
 
 print_log_excerpt() {
@@ -64,6 +71,76 @@ print_log_excerpt() {
     echo "----- $label -----" >&2
     /usr/bin/sed -n '1,160p' "$path" >&2
     echo "----- end $label -----" >&2
+  fi
+}
+
+print_runtime_diagnostics() {
+  echo "----- runtime diagnostics -----" >&2
+  echo "runtime_root=$runtime_root" >&2
+  echo "wine_executable=$wine_executable" >&2
+  echo "prefix_init_executable=$prefix_init_executable" >&2
+  echo "target_executable=$target_executable" >&2
+  echo "WINEPREFIX=$WINEPREFIX" >&2
+  echo "WINEDLLPATH=$WINEDLLPATH" >&2
+  for diagnostic_path in \
+    "$runtime_root/lib/wine/i386-windows/kernel32.dll" \
+    "$runtime_root/lib/wine/i386-windows/ntdll.dll" \
+    "$runtime_root/lib/wine/i386-windows/cmd.exe" \
+    "$runtime_root/lib/wine/x86_64-windows/kernel32.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/ntdll.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/cmd.exe" \
+    "$runtime_root/lib/wine/x86_64-windows/wow64.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/wow64cpu.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/wow64win.dll" \
+    "$runtime_root/lib/wine/x86_64-unix/ntdll.so" \
+    "$runtime_root/lib/wine/aarch64-unix/ntdll.so"
+  do
+    if [[ -e "$diagnostic_path" ]]; then
+      /usr/bin/file "$diagnostic_path" >&2
+    else
+      echo "missing: $diagnostic_path" >&2
+    fi
+  done
+  echo "----- end runtime diagnostics -----" >&2
+}
+
+run_wine_with_timeout() {
+  local label="$1"
+  local command_stdout_path="$2"
+  local command_stderr_path="$3"
+  local command_exit_status_path="$4"
+  shift 4
+
+  rm -f "$command_stdout_path" "$command_stderr_path" "$command_exit_status_path"
+  (
+    set +e
+    "$@" >"$command_stdout_path" 2>"$command_stderr_path"
+    echo "$?" >"$command_exit_status_path"
+  ) &
+  smoke_pid="$!"
+
+  deadline=$((SECONDS + timeout_seconds))
+  while [[ ! -f "$command_exit_status_path" ]]; do
+    if (( SECONDS >= deadline )); then
+      echo "Wine32-on-64 $label timed out after ${timeout_seconds}s." >&2
+      print_log_excerpt "stdout" "$command_stdout_path"
+      print_log_excerpt "stderr" "$command_stderr_path"
+      print_runtime_diagnostics
+      exit 75
+    fi
+    sleep 1
+  done
+
+  wait "$smoke_pid" 2>/dev/null || true
+  smoke_pid=""
+  exit_code="$(cat "$command_exit_status_path")"
+
+  if (( exit_code != 0 )); then
+    echo "Wine32-on-64 $label exited with code $exit_code." >&2
+    print_log_excerpt "stdout" "$command_stdout_path"
+    print_log_excerpt "stderr" "$command_stderr_path"
+    print_runtime_diagnostics
+    exit 65
   fi
 }
 
@@ -116,33 +193,21 @@ export WINEDLLPATH="$runtime_root/lib/wine/x86_64-windows:$runtime_root/lib/wine
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 export DYLD_FALLBACK_LIBRARY_PATH="$runtime_root/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 
-(
-  set +e
-  "$wine_executable" "$target_executable" /c echo "$sentinel" >"$stdout_path" 2>"$stderr_path"
-  echo "$?" >"$exit_status_path"
-) &
-smoke_pid="$!"
+run_wine_with_timeout \
+  "prefix initialization" \
+  "$prefix_init_stdout_path" \
+  "$prefix_init_stderr_path" \
+  "$prefix_init_exit_status_path" \
+  "$wine_executable" "$prefix_init_executable" /c ver
 
-deadline=$((SECONDS + timeout_seconds))
-while [[ ! -f "$exit_status_path" ]]; do
-  if (( SECONDS >= deadline )); then
-    echo "Wine32-on-64 launch smoke timed out after ${timeout_seconds}s." >&2
-    print_log_excerpt "stdout" "$stdout_path"
-    print_log_excerpt "stderr" "$stderr_path"
-    exit 75
-  fi
-  sleep 1
-done
+"$wineserver_executable" -w >/dev/null 2>&1 || true
 
-wait "$smoke_pid" 2>/dev/null || true
-exit_code="$(cat "$exit_status_path")"
-
-if (( exit_code != 0 )); then
-  echo "Wine32-on-64 launch smoke exited with code $exit_code." >&2
-  print_log_excerpt "stdout" "$stdout_path"
-  print_log_excerpt "stderr" "$stderr_path"
-  exit 65
-fi
+run_wine_with_timeout \
+  "32-bit cmd launch smoke" \
+  "$stdout_path" \
+  "$stderr_path" \
+  "$exit_status_path" \
+  "$wine_executable" "$target_executable" /c echo "$sentinel"
 
 if ! grep -F "$sentinel" "$stdout_path" >/dev/null; then
   echo "Wine32-on-64 launch smoke did not print the expected sentinel." >&2

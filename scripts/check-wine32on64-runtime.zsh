@@ -9,7 +9,11 @@ if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
 fi
 
 required_paths=(
+  "lib/wine/i386-windows/cmd.exe"
+  "lib/wine/i386-windows/kernel32.dll"
   "lib/wine/i386-windows/ntdll.dll"
+  "lib/wine/x86_64-windows/cmd.exe"
+  "lib/wine/x86_64-windows/kernel32.dll"
   "lib/wine/x86_64-windows/wow64.dll"
   "lib/wine/x86_64-windows/wow64cpu.dll"
   "lib/wine/x86_64-windows/wow64win.dll"
@@ -61,6 +65,14 @@ assert_file_kind() {
 
 assert_file_kind "lib/wine/i386-windows/ntdll.dll" "PE32 executable" \
   "i386 Windows ntdll.dll"
+assert_file_kind "lib/wine/i386-windows/kernel32.dll" "PE32 executable" \
+  "i386 Windows kernel32.dll"
+assert_file_kind "lib/wine/i386-windows/cmd.exe" "PE32 executable" \
+  "i386 Windows cmd.exe"
+assert_file_kind "lib/wine/x86_64-windows/kernel32.dll" "PE32+ executable" \
+  "x86_64 Windows kernel32.dll"
+assert_file_kind "lib/wine/x86_64-windows/cmd.exe" "PE32+ executable" \
+  "x86_64 Windows cmd.exe"
 assert_file_kind "lib/wine/x86_64-windows/wow64.dll" "PE32+ executable" \
   "x86_64 Windows wow64.dll"
 assert_file_kind "lib/wine/x86_64-windows/wow64cpu.dll" "PE32+ executable" \

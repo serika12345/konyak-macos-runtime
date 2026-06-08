@@ -1,0 +1,59 @@
+name: Smoke runtime artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: GitHub Actions run id containing uploaded runtime artifacts
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  smoke-wine32on64:
+    name: Verify Wine32-on-64 launch smoke from artifacts
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Download Wine runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify Wine32-on-64 launch smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-wine32on64-smoke-runtime"
+          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
