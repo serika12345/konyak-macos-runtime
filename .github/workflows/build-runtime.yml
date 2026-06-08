@@ -221,6 +221,7 @@ jobs:
             nix shell nixpkgs#gnutar -c tar -xaf "$component_archive" -C "$smoke_runtime_root"
           done
 
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   publish-release:

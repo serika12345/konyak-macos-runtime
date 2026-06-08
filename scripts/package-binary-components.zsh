@@ -108,6 +108,7 @@ archive_payload() {
   local payload_root="$1"
   local archive_path="$2"
 
+  assert_no_nix_dylib_references "$payload_root"
   rm -f "$archive_path"
   "$tar_bin" \
     --sort=name \
@@ -118,6 +119,35 @@ archive_payload() {
     -C "$payload_root" \
     -caf "$archive_path" \
     .
+}
+
+assert_no_nix_dylib_references() {
+  local payload_root="$1"
+  local candidate_path
+  local relative_path
+  local file_output
+  local references
+
+  references="$(
+    find "$payload_root" -type f -print |
+      while IFS= read -r candidate_path; do
+        file_output="$(/usr/bin/file "$candidate_path")"
+        if [[ "$file_output" != *"Mach-O"* ]]; then
+          continue
+        fi
+
+        relative_path="${candidate_path#$payload_root/}"
+        otool -L "$candidate_path" |
+          awk -v relative_path="$relative_path" \
+            'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+      done
+  )"
+
+  if [[ -n "$references" ]]; then
+    echo "Runtime component Mach-O files must not reference unpackaged Nix store dylibs:" >&2
+    echo "$references" >&2
+    exit 65
+  fi
 }
 
 copy_nix_dylib_closure() {
@@ -140,7 +170,7 @@ copy_nix_dylib_closure() {
   mkdir -p "$target_dir"
   cp -Lf "$source_path" "$target_path"
   chmod u+w "$target_path"
-  install_name_tool -id "@rpath/$file_name" "$target_path" 2>/dev/null || true
+  install_name_tool -id "@rpath/$file_name" "$target_path"
 
   otool -L "$source_path" |
     awk 'NR > 1 { print $1 }' |
@@ -227,7 +257,7 @@ package_gstreamer() {
 
   reset_dir "$dist_dir/work/gstreamer"
   mkdir -p "$payload_root/lib"
-  cp -Lf "$source_dylib" "$payload_root/lib/libgstreamer-1.0.0.dylib"
+  copy_nix_dylib_closure "$source_dylib" "$payload_root/lib"
   write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "gstreamer" "$(basename "$gstreamer_root")"
   archive_payload "$payload_root" "$archive_path"
 }
