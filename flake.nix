@@ -21,6 +21,12 @@
         metalToolchainBinEnv = builtins.getEnv "KONYAK_METAL_TOOLCHAIN_BIN";
         metalToolchainBin =
           if metalToolchainBinEnv == "" then null else metalToolchainBinEnv;
+        wineRuntimeRootEnv = builtins.getEnv "KONYAK_WINE_RUNTIME_ROOT";
+        wineRuntimeForDxmt =
+          if wineRuntimeRootEnv == "" then
+            self.packages.${system}.konyak-macos-wine-runtime
+          else
+            wineRuntimeRootEnv;
         llvm15 = pkgs.symlinkJoin {
           name = "konyak-dxmt-llvm-15";
           paths = [
@@ -37,7 +43,7 @@
 
         packages.konyak-macos-dxmt = pkgs.callPackage ./nix/dxmt.nix {
           inherit dxmtSource llvm15 metalToolchainBin;
-          wineRuntime = self.packages.${system}.konyak-macos-wine-runtime;
+          wineRuntime = wineRuntimeForDxmt;
         };
 
         packages.default = self.packages.${system}.konyak-macos-wine-runtime;

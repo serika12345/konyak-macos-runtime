@@ -34,11 +34,11 @@ jobs:
       - name: Validate pinned source
         run: nix flake check -L --show-trace
 
-  build-and-package:
-    name: Build and package runtime artifacts
+  build-wine-runtime:
+    name: Build Wine runtime artifact
     needs: validate
     runs-on: macos-15-intel
-    timeout-minutes: 360
+    timeout-minutes: 300
     outputs:
       runtime-release-tag: ${{ steps.release-version.outputs.runtime-release-tag }}
       runtime-release-title: ${{ steps.release-version.outputs.runtime-release-title }}
@@ -90,6 +90,54 @@ jobs:
             -caf dist/konyak-macos-wine-runtime.tar.zst \
             .
 
+      - name: Upload runtime artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist/konyak-macos-wine-runtime.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
+  build-dxmt-component:
+    name: Build DXMT component artifact
+    needs: build-wine-runtime
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Show build host
+        run: |
+          sw_vers
+          uname -a
+          xcodebuild -version
+          nix --version
+
+      - name: Download Wine runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Extract Wine runtime artifact
+        run: |
+          wine_runtime_root="$RUNNER_TEMP/konyak-dxmt-wine-runtime"
+          rm -rf "$wine_runtime_root"
+          mkdir -p "$wine_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime.tar.zst \
+            -C "$wine_runtime_root"
+          ./scripts/check-wine32on64-runtime.zsh "$wine_runtime_root"
+          echo "KONYAK_WINE_RUNTIME_ROOT=$wine_runtime_root" >> "$GITHUB_ENV"
+
       - name: Install Metal toolchain
         run: |
           if ! /usr/bin/xcrun -sdk macosx -find metal >/dev/null 2>&1; then
@@ -105,7 +153,12 @@ jobs:
           echo "KONYAK_METAL_TOOLCHAIN_BIN=$(dirname "$metal_path")" >> "$GITHUB_ENV"
 
       - name: Build DXMT component
-        run: nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace --out-link result-dxmt
+        run: |
+          if [ -z "${KONYAK_WINE_RUNTIME_ROOT:-}" ] || [ ! -d "$KONYAK_WINE_RUNTIME_ROOT" ]; then
+            echo "KONYAK_WINE_RUNTIME_ROOT must point at the extracted Wine runtime artifact." >&2
+            exit 1
+          fi
+          nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace --out-link result-dxmt
 
       - name: Package DXMT component
         if: success()
@@ -123,9 +176,33 @@ jobs:
             -caf dist/konyak-macos-dxmt.tar.zst \
             .
 
-      - name: Package binary runtime components
+      - name: Upload DXMT artifact
         if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist/konyak-macos-dxmt.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
+  package-binary-components:
+    name: Package binary runtime components
+    needs: validate
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Package binary runtime components
         run: |
+          mkdir -p dist
           gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gstreamer.out)"
           freetype_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
           nix shell nixpkgs#gnutar -c \
@@ -134,12 +211,59 @@ jobs:
               "$gstreamer_root" \
               "$freetype_root"
 
+      - name: Upload binary component artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: |
+            dist/konyak-macos-dxvk-macos.tar.zst
+            dist/konyak-macos-moltenvk.tar.zst
+            dist/konyak-macos-gstreamer.tar.zst
+            dist/konyak-macos-freetype.tar.zst
+            dist/konyak-macos-wine-mono.tar.zst
+            dist/konyak-macos-winetricks.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
+  generate-release-metadata:
+    name: Generate release metadata
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - package-binary-components
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      KONYAK_RUNTIME_RELEASE_TAG: ${{ needs.build-wine-runtime.outputs.runtime-release-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Download Wine runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
       - name: Generate release metadata
-        if: success()
-        env:
-          KONYAK_RUNTIME_RELEASE_TAG: ${{ steps.release-version.outputs.runtime-release-tag }}
         run: |
           KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${KONYAK_RUNTIME_RELEASE_TAG}" \
+            nix shell nixpkgs#jq -c \
             ./scripts/make-source-manifest.zsh \
               dist \
               dist/konyak-macos-wine-runtime.tar.zst \
@@ -151,33 +275,22 @@ jobs:
               wine-mono=dist/konyak-macos-wine-mono.tar.zst \
               winetricks=dist/konyak-macos-winetricks.tar.zst
 
-      - name: Upload runtime artifact
-        if: success()
+      - name: Upload release metadata
         uses: actions/upload-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
+          name: konyak-macos-release-metadata
           path: |
-            dist/konyak-macos-wine-runtime.tar.zst
-            dist/konyak-macos-dxmt.tar.zst
-            dist/konyak-macos-dxvk-macos.tar.zst
-            dist/konyak-macos-moltenvk.tar.zst
-            dist/konyak-macos-gstreamer.tar.zst
-            dist/konyak-macos-freetype.tar.zst
-            dist/konyak-macos-wine-mono.tar.zst
-            dist/konyak-macos-winetricks.tar.zst
             dist/konyak-macos-wine-runtime-stack-source.json
             dist/konyak-macos-runtime.release.json
-
-      - name: Upload DXMT artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist/konyak-macos-dxmt.tar.zst
+          if-no-files-found: error
+          retention-days: 14
 
   smoke-wine32on64:
     name: Verify Wine32-on-64 launch smoke
-    needs: build-and-package
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - package-binary-components
     runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
@@ -194,6 +307,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
           path: dist
 
       - name: Verify Wine32-on-64 launch smoke
@@ -227,19 +352,38 @@ jobs:
   publish-release:
     name: Publish runtime release
     needs:
-      - build-and-package
+      - build-wine-runtime
+      - generate-release-metadata
       - smoke-wine32on64
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      KONYAK_RUNTIME_RELEASE_TAG: ${{ needs.build-and-package.outputs.runtime-release-tag }}
-      KONYAK_RUNTIME_RELEASE_TITLE: ${{ needs.build-and-package.outputs.runtime-release-title }}
+      KONYAK_RUNTIME_RELEASE_TAG: ${{ needs.build-wine-runtime.outputs.runtime-release-tag }}
+      KONYAK_RUNTIME_RELEASE_TITLE: ${{ needs.build-wine-runtime.outputs.runtime-release-title }}
     steps:
-      - name: Download runtime artifacts
+      - name: Download Wine runtime artifact
         uses: actions/download-artifact@v4
         with:
           name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
+      - name: Download release metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-release-metadata
           path: dist
 
       - name: Publish release
