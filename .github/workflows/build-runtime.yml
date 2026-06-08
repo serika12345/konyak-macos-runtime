@@ -394,14 +394,18 @@ jobs:
             dist/konyak-macos-runtime.release.json
           )
 
-          if gh release view "$KONYAK_RUNTIME_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" --clobber
+          if gh release view "$KONYAK_RUNTIME_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
             gh release edit "$KONYAK_RUNTIME_RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
               --title "$KONYAK_RUNTIME_RELEASE_TITLE" \
               --notes-file dist/release-notes.md \
               --latest
           else
             gh release create "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
               --title "$KONYAK_RUNTIME_RELEASE_TITLE" \
               --notes-file dist/release-notes.md \
               --latest
