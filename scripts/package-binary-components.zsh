@@ -22,7 +22,8 @@ resolve_gnu_tar() {
   return 1
 }
 
-readonly tar_bin="$(resolve_gnu_tar)"
+tar_bin="$(resolve_gnu_tar)" || exit 65
+readonly tar_bin
 
 readonly dxvk_version="v1.10.3-20230507"
 readonly dxvk_url="https://github.com/Gcenx/DXVK-macOS/releases/download/v1.10.3-20230507/dxvk-macOS-async-v1.10.3-20230507.tar.gz"
@@ -73,6 +74,18 @@ download_if_missing() {
 reset_dir() {
   rm -rf "$1"
   mkdir -p "$1"
+}
+
+require_x86_64_macho_dylib() {
+  local path="$1"
+  local file_output
+
+  file_output="$(/usr/bin/file "$path")"
+  if [[ "$file_output" != *"Mach-O 64-bit dynamically linked shared library x86_64"* ]]; then
+    echo "Expected an x86_64 macOS dylib for the macOS Wine runtime component:" >&2
+    echo "$file_output" >&2
+    exit 65
+  fi
 }
 
 write_stack_manifest() {
@@ -162,8 +175,8 @@ package_dxvk_macos() {
   "$tar_bin" --warning=no-unknown-keyword -xzf "$archive_cache" -C "$extract_root"
 
   for dll_name in dxgi.dll d3d9.dll d3d10core.dll d3d11.dll; do
-    local source_x64
-    local source_x32
+    local source_x64=""
+    local source_x32=""
     source_x64="$(find "$extract_root" -path "*/x64/$dll_name" -type f | head -n 1)"
     source_x32="$(find "$extract_root" -path "*/x32/$dll_name" -type f | head -n 1)"
     if [[ -z "$source_x64" || -z "$source_x32" ]]; then
@@ -210,6 +223,7 @@ package_gstreamer() {
     echo "GStreamer dylib not found: $source_dylib" >&2
     exit 65
   fi
+  require_x86_64_macho_dylib "$source_dylib"
 
   reset_dir "$dist_dir/work/gstreamer"
   mkdir -p "$payload_root/lib"
@@ -227,9 +241,11 @@ package_freetype() {
     echo "FreeType dylib not found: $source_dylib" >&2
     exit 65
   fi
+  require_x86_64_macho_dylib "$source_dylib"
 
   reset_dir "$dist_dir/work/freetype"
   copy_nix_dylib_closure "$source_dylib" "$payload_root/lib"
+  ln -sf libfreetype.6.dylib "$payload_root/lib/libfreetype.dylib"
   write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "freetype" "$(basename "$freetype_root")"
   archive_payload "$payload_root" "$archive_path"
 }
