@@ -70,4 +70,37 @@ assert_file_kind "lib/wine/x86_64-windows/wow64win.dll" "PE32+ executable" \
 assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
   "host Unix ntdll.so"
 
+find_macho_nix_dylib_references() {
+  local scan_root
+  local candidate_path
+  local relative_path
+  local file_output
+
+  for scan_root in "$runtime_root/bin" "$runtime_root/lib"; do
+    if [[ ! -d "$scan_root" ]]; then
+      continue
+    fi
+
+    find "$scan_root" -type f -print |
+      while IFS= read -r candidate_path; do
+        file_output="$(/usr/bin/file "$candidate_path")"
+        if [[ "$file_output" != *"Mach-O"* ]]; then
+          continue
+        fi
+
+        relative_path="${candidate_path#$runtime_root/}"
+        otool -L "$candidate_path" |
+          awk -v relative_path="$relative_path" \
+            'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+      done
+  done
+}
+
+nix_dylib_references="$(find_macho_nix_dylib_references)"
+if [[ -n "$nix_dylib_references" ]]; then
+  echo "Wine runtime Mach-O files must not reference unpackaged Nix store dylibs:" >&2
+  echo "$nix_dylib_references" >&2
+  exit 65
+fi
+
 echo "Wine32-on-64 runtime layout OK: $runtime_root"

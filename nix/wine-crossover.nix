@@ -297,6 +297,128 @@ EOF
       exit 1
     fi
 
+    copy_runtime_dylib_closure() {
+      local source_path="$1"
+      local dependency
+      local dependency_file_name
+      local target_path
+
+      dependency_file_name="$(basename "$source_path")"
+      target_path="$out/lib/$dependency_file_name"
+
+      if [ ! -f "$source_path" ]; then
+        echo "Runtime dylib dependency not found: $source_path" >&2
+        exit 1
+      fi
+
+      if [ -f "$target_path" ]; then
+        return 0
+      fi
+
+      cp -Lf "$source_path" "$target_path"
+      chmod u+w "$target_path"
+      install_name_tool -id "@rpath/$dependency_file_name" "$target_path"
+
+      otool -L "$source_path" |
+        awk 'NR > 1 { print $1 }' |
+        while IFS= read -r dependency; do
+          case "$dependency" in
+            /nix/store/*.dylib) ;;
+            *) continue ;;
+          esac
+
+          if [ "$dependency" = "$source_path" ]; then
+            continue
+          fi
+
+          copy_runtime_dylib_closure "$dependency"
+          dependency_file_name="$(basename "$dependency")"
+          install_name_tool \
+            -change "$dependency" "@loader_path/$dependency_file_name" \
+            "$target_path"
+        done
+    }
+
+    runtime_dylib_reference() {
+      local target_path="$1"
+      local dependency_file_name="$2"
+
+      case "$target_path" in
+        "$out/bin/"*)
+          printf '@loader_path/../lib/%s\n' "$dependency_file_name"
+          ;;
+        "$out/lib/wine/"*)
+          printf '@loader_path/../../%s\n' "$dependency_file_name"
+          ;;
+        "$out/lib/"*)
+          printf '@loader_path/%s\n' "$dependency_file_name"
+          ;;
+        *)
+          printf '@rpath/%s\n' "$dependency_file_name"
+          ;;
+      esac
+    }
+
+    rewrite_nix_dylib_references() {
+      local target_path="$1"
+      local dependency
+      local dependency_file_name
+      local replacement_reference
+
+      chmod u+w "$target_path"
+      otool -L "$target_path" |
+        awk 'NR > 1 { print $1 }' |
+        while IFS= read -r dependency; do
+          case "$dependency" in
+            /nix/store/*.dylib) ;;
+            *) continue ;;
+          esac
+
+          copy_runtime_dylib_closure "$dependency"
+          dependency_file_name="$(basename "$dependency")"
+          replacement_reference="$(runtime_dylib_reference "$target_path" "$dependency_file_name")"
+          install_name_tool \
+            -change "$dependency" "$replacement_reference" \
+            "$target_path"
+        done
+    }
+
+    find_macho_nix_dylib_references() {
+      local candidate_path
+      local file_output
+
+      find "$out/bin" "$out/lib" -type f -print |
+        while IFS= read -r candidate_path; do
+          file_output="$(/usr/bin/file "$candidate_path")"
+          case "$file_output" in
+            *Mach-O*) ;;
+            *) continue ;;
+          esac
+
+          otool -L "$candidate_path" |
+            awk -v relative_path="''${candidate_path#$out/}" \
+              'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+        done
+    }
+
+    find "$out/bin" "$out/lib" -type f -print |
+      while IFS= read -r candidate_path; do
+        file_output="$(/usr/bin/file "$candidate_path")"
+        case "$file_output" in
+          *Mach-O*) ;;
+          *) continue ;;
+        esac
+
+        rewrite_nix_dylib_references "$candidate_path"
+      done
+
+    remaining_nix_dylib_references="$(find_macho_nix_dylib_references)"
+    if [ -n "$remaining_nix_dylib_references" ]; then
+      echo "Wine runtime Mach-O files still reference unpackaged Nix store dylibs:" >&2
+      echo "$remaining_nix_dylib_references" >&2
+      exit 1
+    fi
+
     mkdir -p "$out/Licenses"
     cp COPYING.LIB "$out/Licenses/Wine-LGPL-2.1-or-later.txt"
     cat >"$out/SOURCE.txt" <<EOF
