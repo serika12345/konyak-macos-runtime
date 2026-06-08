@@ -37,6 +37,8 @@ runtime/
 ## Implementation Checklist
 
 - [x] Build and package CrossOver-derived Wine in Konyak runtime layout.
+- [x] Add a Wine32-on-64 launch smoke that runs the runtime's 32-bit
+      `cmd.exe` against an assembled Konyak runtime stack.
 - [ ] Ensure local `macos-vulkan-wine-smoke` passes with that Wine.
 - [ ] Add a Nix DXMT package that builds locally on macOS before Actions.
 - [ ] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's

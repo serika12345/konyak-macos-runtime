@@ -97,13 +97,36 @@ jobs:
       - name: Package binary runtime components
         if: success()
         run: |
-          gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#gst_all_1.gstreamer.out)"
-          freetype_root="$(nix build --no-link --print-out-paths nixpkgs#freetype.out)"
+          gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gstreamer.out)"
+          freetype_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
           nix shell nixpkgs#gnutar -c \
             ./scripts/package-binary-components.zsh \
               dist \
               "$gstreamer_root" \
               "$freetype_root"
+
+      - name: Verify Wine32-on-64 launch smoke
+        run: |
+          smoke_runtime_root="$RUNNER_TEMP/konyak-wine32on64-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          /usr/bin/ditto result "$smoke_runtime_root"
+          chmod -R u+w "$smoke_runtime_root"
+
+          component_archives=(
+            dist/konyak-macos-dxmt.tar.zst
+            dist/konyak-macos-dxvk-macos.tar.zst
+            dist/konyak-macos-moltenvk.tar.zst
+            dist/konyak-macos-gstreamer.tar.zst
+            dist/konyak-macos-freetype.tar.zst
+            dist/konyak-macos-wine-mono.tar.zst
+            dist/konyak-macos-winetricks.tar.zst
+          )
+
+          for component_archive in "${component_archives[@]}"; do
+            nix shell nixpkgs#gnutar -c tar -xaf "$component_archive" -C "$smoke_runtime_root"
+          done
+
+          ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
       - name: Generate release metadata
         if: success()

@@ -126,6 +126,105 @@ stdenv.mkDerivation {
     perl -0pi -e 's/\n#endif\n\z/\n#else\n\n#include "config.h"\n#include "macdrv.h"\n\nvoid macdrv_client_surface_presented(const macdrv_event *event)\n{\n}\n\n#endif\n/' \
       dlls/winemac.drv/d3dmetal.c
 
+    # Konyak distributes FreeType as a runtime stack component overlaid into
+    # $runtime/lib. Wine's macOS loader re-execs through a temporary binary, so
+    # DYLD_* search paths and @loader_path in dlopen strings are not reliable
+    # for FreeType's late dlopen calls. Resolve FreeType from the Unix-side Wine
+    # DLL path reported by dladdr instead.
+    substituteInPlace dlls/win32u/freetype.c dlls/dwrite/freetype.c \
+      --replace-fail 'dlopen(SONAME_LIBFREETYPE, RTLD_NOW)' \
+        'konyak_dlopen_runtime_freetype()'
+    substituteInPlace dlls/dwrite/freetype.c \
+      --replace-fail '#include <dlfcn.h>' '#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>'
+    substituteInPlace dlls/win32u/freetype.c dlls/dwrite/freetype.c \
+      --replace-fail 'static void *ft_handle = NULL;' 'static void *ft_handle = NULL;
+
+#ifdef __APPLE__
+static void *konyak_dlopen_freetype_path(const char *path)
+{
+    void *handle;
+
+    if (!path || !path[0]) return NULL;
+    handle = dlopen(path, RTLD_NOW);
+    if (!handle) WARN("Failed to load Konyak FreeType %s: %s\n", path, dlerror());
+    return handle;
+}
+
+static void *konyak_dlopen_runtime_freetype_from_winedllpath(void)
+{
+    const char *cursor = getenv("WINEDLLPATH");
+    char entry[4096];
+    char freetype_path[4096];
+
+    while (cursor && *cursor)
+    {
+        const char *end = strchr(cursor, 58);
+        size_t entry_length = end ? (size_t)(end - cursor) : strlen(cursor);
+
+        if (entry_length > 0 && entry_length < sizeof(entry))
+        {
+            char *marker;
+
+            memcpy(entry, cursor, entry_length);
+            entry[entry_length] = 0;
+            if ((marker = strstr(entry, "/lib/wine")))
+            {
+                int lib_length = (int)(marker - entry + 4);
+                int length = snprintf(freetype_path, sizeof(freetype_path),
+                                      "%.*s/libfreetype.6.dylib", lib_length, entry);
+                if (length > 0 && length < sizeof(freetype_path))
+                {
+                    void *handle = konyak_dlopen_freetype_path(freetype_path);
+                    if (handle) return handle;
+                }
+            }
+        }
+
+        if (!end) break;
+        cursor = end + 1;
+    }
+
+    return NULL;
+}
+
+static void *konyak_dlopen_runtime_freetype(void)
+{
+    Dl_info info;
+    char image_path[4096];
+    char freetype_path[4096];
+    char *slash;
+    int length;
+    void *handle;
+
+    if ((handle = konyak_dlopen_runtime_freetype_from_winedllpath())) return handle;
+
+    if (dladdr((const void *)konyak_dlopen_runtime_freetype, &info) && info.dli_fname &&
+        (length = snprintf(image_path, sizeof(image_path), "%s", info.dli_fname)) > 0 &&
+        length < sizeof(image_path) && (slash = strrchr(image_path, 47)))
+    {
+        *slash = 0;
+        length = snprintf(freetype_path, sizeof(freetype_path), "%s/../../libfreetype.6.dylib",
+                          image_path);
+        if (length > 0 && length < sizeof(freetype_path))
+        {
+            handle = dlopen(freetype_path, RTLD_NOW);
+            if (handle) return handle;
+            WARN("Failed to load Konyak FreeType %s: %s\n", freetype_path, dlerror());
+        }
+    }
+
+    return dlopen(SONAME_LIBFREETYPE, RTLD_NOW);
+}
+#else
+static void *konyak_dlopen_runtime_freetype(void)
+{
+    return dlopen(SONAME_LIBFREETYPE, RTLD_NOW);
+}
+#endif'
+
     mkdir -p "$TMPDIR/konyak-llvm-bin"
     ln -sf ${llvmPackages.clang-unwrapped}/bin/clang "$TMPDIR/konyak-llvm-bin/clang"
     ln -sf ${llvmPackages.lld}/bin/lld-link "$TMPDIR/konyak-llvm-bin/lld-link"

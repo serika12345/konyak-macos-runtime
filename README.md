@@ -51,6 +51,15 @@ Runtime archives must include:
 - Wine32-on-64 payload for 32-bit Windows executables
 - a Konyak-compatible runtime stack source manifest
 
+Release builds verify Wine32-on-64 in two stages:
+
+1. `scripts/check-wine32on64-runtime.zsh result` checks the Wine-only payload
+   layout and binary file types.
+2. `scripts/smoke-wine32on64-launch.zsh <assembled-runtime-root>` runs the
+   runtime's 32-bit `cmd.exe` through Wine32-on-64. This smoke test requires an
+   assembled runtime stack with component archives overlaid, including FreeType;
+   it is not expected to pass against the Wine-only `result` artifact.
+
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.
 
