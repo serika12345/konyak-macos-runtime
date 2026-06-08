@@ -32,11 +32,11 @@ jobs:
         run: nix flake check -L --show-trace
 
       - name: Build runtime
-        run: nix build .#packages.x86_64-darwin.konyak-macos-wine-runtime -L --show-trace
+        run: nix build .#packages.x86_64-darwin.konyak-macos-wine-runtime -L --show-trace --out-link result-wine-runtime
 
       - name: Capture release version
         run: |
-          runtime_version="$(jq -r '.version' result/build-info.json)"
+          runtime_version="$(jq -r '.version' result-wine-runtime/build-info.json)"
           if [ -z "$runtime_version" ] || [ "$runtime_version" = "null" ]; then
             echo "Runtime build-info.json did not contain a release version." >&2
             exit 1
@@ -45,7 +45,7 @@ jobs:
           echo "KONYAK_RUNTIME_RELEASE_TITLE=Konyak macOS runtime $runtime_version" >> "$GITHUB_ENV"
 
       - name: Verify Wine32-on-64 runtime payload
-        run: ./scripts/check-wine32on64-runtime.zsh result
+        run: ./scripts/check-wine32on64-runtime.zsh result-wine-runtime
 
       - name: Package Wine runtime
         if: success()
@@ -57,7 +57,7 @@ jobs:
             --group=0 \
             --numeric-owner \
             --mode='u+rwX,go+rX' \
-            -C result \
+            -C result-wine-runtime \
             -caf dist/konyak-macos-wine-runtime.tar.zst \
             .
 
@@ -76,14 +76,14 @@ jobs:
           echo "KONYAK_METAL_TOOLCHAIN_BIN=$(dirname "$metal_path")" >> "$GITHUB_ENV"
 
       - name: Build DXMT component
-        run: nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace
+        run: nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace --out-link result-dxmt
 
       - name: Package DXMT component
         if: success()
         run: |
           mkdir -p dist
           mkdir -p dist/dxmt-component/lib/dxmt
-          cp -R result/. dist/dxmt-component/lib/dxmt/
+          cp -R result-dxmt/. dist/dxmt-component/lib/dxmt/
           nix shell nixpkgs#gnutar -c tar \
             --sort=name \
             --owner=0 \
@@ -109,7 +109,7 @@ jobs:
         run: |
           smoke_runtime_root="$RUNNER_TEMP/konyak-wine32on64-smoke-runtime"
           rm -rf "$smoke_runtime_root"
-          /usr/bin/ditto result "$smoke_runtime_root"
+          /usr/bin/ditto result-wine-runtime "$smoke_runtime_root"
           chmod -R u+w "$smoke_runtime_root"
 
           component_archives=(
