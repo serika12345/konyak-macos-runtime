@@ -38,6 +38,8 @@ stdenv.mkDerivation {
     xxd
     pkgsCross.mingwW64.buildPackages.gcc
     pkgsCross.mingwW64.buildPackages.binutils
+    pkgsCross.mingw32.buildPackages.gcc
+    pkgsCross.mingw32.buildPackages.binutils
   ];
 
   buildInputs = [
@@ -78,44 +80,72 @@ EOF
     export NIX_LDFLAGS="$NIX_LDFLAGS -L${zlib}/lib -L$TMPDIR/konyak-curses-lib -L${ncurses}/lib -L${libxml2.out}/lib -L${sqlite.out}/lib"
     export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I${sqlite.dev}/include"
 
-    mkdir -p "$TMPDIR/konyak-wine-objects"
+    mkdir -p "$TMPDIR/konyak-wine-objects/x86_64" "$TMPDIR/konyak-wine-objects/i386"
     (
-      cd "$TMPDIR/konyak-wine-objects"
+      cd "$TMPDIR/konyak-wine-objects/x86_64"
       x86_64-w64-mingw32-ar x ${wineRuntime}/lib/wine/x86_64-windows/libwinecrt0.a unix_lib.o
+    )
+    (
+      cd "$TMPDIR/konyak-wine-objects/i386"
+      i686-w64-mingw32-ar x ${wineRuntime}/lib/wine/i386-windows/libwinecrt0.a unix_lib.o
     )
     substituteInPlace src/winemetal/meson.build \
       --replace-fail 'winemetal_ld_args = []' \
-        "winemetal_ld_args = ['$TMPDIR/konyak-wine-objects/unix_lib.o']"
+        "winemetal_ld_args = []
+if cpu_family == 'x86_64'
+  winemetal_ld_args += ['$TMPDIR/konyak-wine-objects/x86_64/unix_lib.o']
+elif cpu_family == 'x86'
+  winemetal_ld_args += ['$TMPDIR/konyak-wine-objects/i386/unix_lib.o']
+endif"
 
-    meson setup \
-      --cross-file build-win64.txt \
-      --buildtype=release \
-      --prefix="$out" \
-      -Dnative_llvm_path=${llvm15} \
-      -Dwine_install_path=${wineRuntime} \
-      -Dwine_builtin_dll=false \
-      -Denable_tests=false \
-      -Denable_nvapi=false \
-      -Denable_nvngx=false \
-      build .
+    setup_dxmt_build() {
+      local cross_file="$1"
+      local build_dir="$2"
+
+      meson setup \
+        --cross-file "$cross_file" \
+        --buildtype=release \
+        --prefix="$out" \
+        -Dnative_llvm_path=${llvm15} \
+        -Dwine_install_path=${wineRuntime} \
+        -Dwine_builtin_dll=false \
+        -Denable_tests=false \
+        -Denable_nvapi=false \
+        -Denable_nvngx=false \
+        "$build_dir" .
+    }
+
+    cp build-win32.txt "$TMPDIR/build-win32-konyak.txt"
+    cat >> "$TMPDIR/build-win32-konyak.txt" <<'EOF'
+
+[built-in options]
+c_link_args = ['-L${pkgsCross.mingw32.windows.mcfgthreads}/lib']
+cpp_link_args = ['-L${pkgsCross.mingw32.windows.mcfgthreads}/lib']
+EOF
+
+    setup_dxmt_build build-win64.txt build-win64
+    setup_dxmt_build "$TMPDIR/build-win32-konyak.txt" build-win32
 
     runHook postConfigure
   '';
 
   buildPhase = ''
     runHook preBuild
-    meson compile -C build
+    meson compile -C build-win64
+    meson compile -C build-win32
     runHook postBuild
   '';
 
   installPhase = ''
     runHook preInstall
-    meson install -C build --destdir "$TMPDIR/dxmt-install"
+    meson install -C build-win64 --destdir "$TMPDIR/dxmt-install-win64"
+    meson install -C build-win32 --destdir "$TMPDIR/dxmt-install-win32"
 
-    mkdir -p "$out/x86_64-windows" "$out/x86_64-unix" "$out/Licenses"
+    mkdir -p "$out/x86_64-windows" "$out/i386-windows" "$out/x86_64-unix" "$out/Licenses"
 
-    find "$TMPDIR/dxmt-install" -type f -name '*.dll' -print -exec cp -f {} "$out/x86_64-windows/" \;
-    find "$TMPDIR/dxmt-install" -type f -name 'winemetal.so' -print -exec cp -f {} "$out/x86_64-unix/" \;
+    find "$TMPDIR/dxmt-install-win64" -type f -name '*.dll' -print -exec cp -f {} "$out/x86_64-windows/" \;
+    find "$TMPDIR/dxmt-install-win32" -type f -name '*.dll' -print -exec cp -f {} "$out/i386-windows/" \;
+    find "$TMPDIR/dxmt-install-win64" -type f -name 'winemetal.so' -print -exec cp -f {} "$out/x86_64-unix/" \;
 
     copy_dxmt_dylib_closure() {
       local source_path="$1"
@@ -234,7 +264,7 @@ EOF
   },
   "wineRuntime": "${wineRuntime}",
   "wineBuiltinDll": false,
-  "architectures": ["x86_64"]
+  "architectures": ["i386", "x86_64"]
 }
 EOF
 
@@ -243,6 +273,10 @@ EOF
       "$out/x86_64-windows/d3d11.dll" \
       "$out/x86_64-windows/dxgi.dll" \
       "$out/x86_64-windows/d3d10core.dll" \
+      "$out/i386-windows/winemetal.dll" \
+      "$out/i386-windows/d3d11.dll" \
+      "$out/i386-windows/dxgi.dll" \
+      "$out/i386-windows/d3d10core.dll" \
       "$out/x86_64-unix/winemetal.so"
     do
       if [ ! -f "$required" ]; then

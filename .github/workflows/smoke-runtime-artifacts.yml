@@ -62,4 +62,5 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wine32on64-smoke-runtime"
           ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"

@@ -160,6 +160,9 @@ jobs:
           fi
           nix build --impure .#packages.x86_64-darwin.konyak-macos-dxmt -L --show-trace --out-link result-dxmt
 
+      - name: Verify DXMT component
+        run: ./scripts/check-dxmt-component.zsh result-dxmt
+
       - name: Package DXMT component
         if: success()
         run: |
@@ -332,6 +335,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wine32on64-smoke-runtime"
           ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   publish-release:

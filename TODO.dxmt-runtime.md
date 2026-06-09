@@ -26,6 +26,10 @@ runtime/
   components/
     dxvk/
     dxmt/
+      i386-windows/d3d11.dll
+      i386-windows/dxgi.dll
+      i386-windows/d3d10core.dll
+      i386-windows/winemetal.dll
       x86_64-windows/d3d11.dll
       x86_64-windows/dxgi.dll
       x86_64-windows/d3d10core.dll
@@ -43,8 +47,8 @@ runtime/
 - [ ] Add a Nix DXMT package that builds locally on macOS before Actions.
 - [ ] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's
       Metal compiler is delivered by Xcode outside the Nix store.
-- [ ] Verify DXMT output contains `winemetal.so`, `winemetal.dll`,
-      `d3d11.dll`, `dxgi.dll`, and `d3d10core.dll`.
+- [x] Verify DXMT output contains x86_64 `winemetal.so` plus both x86_64 and
+      i386 `winemetal.dll`, `d3d11.dll`, `dxgi.dll`, and `d3d10core.dll`.
 - [ ] Add Wine-side DXMT prerequisites if the package requires hidden
       `winemac.drv` API exports.
 - [ ] Keep DXVK packaging independent and usable without GPTK.
@@ -68,4 +72,6 @@ runtime/
 - DXMT cross build needs a Wine install/build path and a Windows cross compiler.
 - Xcode 26+ can require `xcodebuild -downloadComponent MetalToolchain` before
   `xcrun -sdk macosx metal` works.
-- 32-bit DXMT is optional initially; 64-bit DXMT is the first target.
+- DXMT now builds both x86_64 and i386 Windows DLLs. The Unix-side
+  `winemetal.so` remains x86_64 because the runtime is Wine32-on-64 and has no
+  i386 Unix host path.
