@@ -67,6 +67,12 @@ runtime/
       The current `dxvk-macos` component combines the pinned Gcenx DXVK-macOS
       DLLs with upstream DXVK `v1.10.3` only for missing `d3d10.dll` and
       `d3d10_1.dll`, and is checked by `scripts/check-dxvk-component.zsh`.
+- [x] Package GStreamer plugins and `gst-plugin-scanner` with the macOS runtime
+      so Wine media handling does not depend on host GStreamer plugins.
+      The current `gstreamer` component includes representative core,
+      playback/typefind, MP4/WAV, and Apple media plugin dylibs under
+      `lib/gstreamer-1.0`, includes `libexec/gstreamer-1.0/gst-plugin-scanner`,
+      and is checked by `scripts/check-gstreamer-component.zsh`.
 - [ ] Change Konyak installer behavior so GPTK import never overwrites
       `lib/wine/*` directly.
 - [ ] Add backend enum support in Konyak CLI/UI:

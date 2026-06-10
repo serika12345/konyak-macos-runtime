@@ -36,7 +36,7 @@ component_version() {
       echo "v1.4.1"
       ;;
     gstreamer)
-      echo "nix-gstreamer"
+      echo "nix-gstreamer+plugins"
       ;;
     freetype)
       echo "nix-freetype"

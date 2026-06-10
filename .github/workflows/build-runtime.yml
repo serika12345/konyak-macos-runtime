@@ -207,12 +207,19 @@ jobs:
         run: |
           mkdir -p dist
           gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gstreamer.out)"
+          gstreamer_plugins_base_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-base.out)"
+          gstreamer_plugins_good_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-good.out)"
+          gstreamer_plugins_bad_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-bad.out)"
           freetype_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
           nix shell nixpkgs#gnutar -c \
             ./scripts/package-binary-components.zsh \
               dist \
               "$gstreamer_root" \
-              "$freetype_root"
+              "$freetype_root" \
+              "$gstreamer_root" \
+              "$gstreamer_plugins_base_root" \
+              "$gstreamer_plugins_good_root" \
+              "$gstreamer_plugins_bad_root"
 
       - name: Verify DXVK component
         run: |
@@ -223,6 +230,16 @@ jobs:
             -xaf dist/konyak-macos-dxvk-macos.tar.zst \
             -C "$dxvk_component_root"
           ./scripts/check-dxvk-component.zsh "$dxvk_component_root"
+
+      - name: Verify GStreamer component
+        run: |
+          gstreamer_component_root="$RUNNER_TEMP/konyak-gstreamer-component"
+          rm -rf "$gstreamer_component_root"
+          mkdir -p "$gstreamer_component_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-gstreamer.tar.zst \
+            -C "$gstreamer_component_root"
+          ./scripts/check-gstreamer-component.zsh "$gstreamer_component_root"
 
       - name: Upload binary component artifacts
         uses: actions/upload-artifact@v4
@@ -347,6 +364,7 @@ jobs:
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   publish-release:

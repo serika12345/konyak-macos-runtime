@@ -57,7 +57,7 @@ The release manifest is assembled from separately published component archives:
 - DXVK-macOS
 - DXMT
 - MoltenVK
-- GStreamer
+- GStreamer, including plugins and `gst-plugin-scanner`
 - FreeType
 - wine-mono
 - winetricks
@@ -77,6 +77,12 @@ DXVK-macOS archive provides `dxgi.dll`, `d3d9.dll`, `d3d10core.dll`, and
 `d3d10_1.dll` from upstream DXVK `v1.10.3`. Release builds run
 `scripts/check-dxvk-component.zsh` against the DXVK component archive and the
 assembled smoke runtime so both i386 and x86_64 Windows payloads stay complete.
+
+GStreamer is packaged with `libgstreamer-1.0.0.dylib`, plugin dylibs under
+`lib/gstreamer-1.0`, and `libexec/gstreamer-1.0/gst-plugin-scanner`. Release
+builds run `scripts/check-gstreamer-component.zsh` against the component
+archive and the assembled smoke runtime, rejecting missing representative media
+plugins or unpackaged `/nix/store/*.dylib` references.
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.

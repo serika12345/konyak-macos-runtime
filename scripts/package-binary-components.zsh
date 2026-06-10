@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 dist_dir="${1:-$repo_root/dist}"
 gstreamer_root="${2:-}"
 freetype_root="${3:-}"
+gstreamer_plugin_roots=("${@:4}")
 cache_dir="${KONYAK_COMPONENT_DOWNLOAD_CACHE:-$repo_root/.component-cache}"
 
 resolve_gnu_tar() {
@@ -47,8 +48,12 @@ readonly winetricks_sha256="431f82fc74000e6c864409f1d8fb495d696c03928808e3e8acff
 
 if [[ -z "$gstreamer_root" || ! -d "$gstreamer_root" ||
       -z "$freetype_root" || ! -d "$freetype_root" ]]; then
-  echo "Usage: $0 <dist-dir> <gstreamer-root> <freetype-root>" >&2
+  echo "Usage: $0 <dist-dir> <gstreamer-root> <freetype-root> [gstreamer-plugin-root ...]" >&2
   exit 64
+fi
+
+if [[ ${#gstreamer_plugin_roots[@]} -eq 0 ]]; then
+  gstreamer_plugin_roots=("$gstreamer_root")
 fi
 
 mkdir -p "$dist_dir" "$cache_dir"
@@ -154,9 +159,10 @@ assert_no_nix_dylib_references() {
   fi
 }
 
-copy_nix_dylib_closure() {
+copy_nix_macho_closure() {
   local source_path="$1"
   local target_dir="$2"
+  local install_id="${3:-false}"
   local file_name="${source_path:t}"
   local target_path="${target_dir}/${file_name}"
   local dependency
@@ -174,7 +180,9 @@ copy_nix_dylib_closure() {
   mkdir -p "$target_dir"
   cp -Lf "$source_path" "$target_path"
   chmod u+w "$target_path"
-  install_name_tool -id "@rpath/$file_name" "$target_path"
+  if [[ "$install_id" == true ]]; then
+    install_name_tool -id "@rpath/$file_name" "$target_path"
+  fi
 
   otool -L "$source_path" |
     awk 'NR > 1 { print $1 }' |
@@ -185,12 +193,20 @@ copy_nix_dylib_closure() {
         continue
       fi
 
-      copy_nix_dylib_closure "$dependency" "$target_dir"
+      copy_nix_macho_closure "$dependency" "$target_dir" true
       dependency_file_name="${dependency:t}"
       install_name_tool \
         -change "$dependency" "@loader_path/$dependency_file_name" \
         "$target_path"
     done
+}
+
+copy_nix_dylib_closure() {
+  copy_nix_macho_closure "$1" "$2" true
+}
+
+copy_nix_executable_closure() {
+  copy_nix_macho_closure "$1" "$2" false
 }
 
 package_dxvk_macos() {
@@ -270,17 +286,46 @@ package_gstreamer() {
   local payload_root="$dist_dir/work/gstreamer/payload"
   local archive_path="$dist_dir/konyak-macos-gstreamer.tar.zst"
   local source_dylib="$gstreamer_root/lib/libgstreamer-1.0.0.dylib"
+  local source_scanner="$gstreamer_root/libexec/gstreamer-1.0/gst-plugin-scanner"
+  local plugin_root
+  local plugin_dir
+  local plugin_path
+  local copied_plugins=0
 
   if [[ ! -f "$source_dylib" ]]; then
     echo "GStreamer dylib not found: $source_dylib" >&2
     exit 65
   fi
+  if [[ ! -x "$source_scanner" ]]; then
+    echo "GStreamer plugin scanner not found: $source_scanner" >&2
+    exit 65
+  fi
   require_x86_64_macho_dylib "$source_dylib"
 
   reset_dir "$dist_dir/work/gstreamer"
-  mkdir -p "$payload_root/lib"
+  mkdir -p "$payload_root/lib" "$payload_root/lib/gstreamer-1.0" "$payload_root/libexec/gstreamer-1.0"
   copy_nix_dylib_closure "$source_dylib" "$payload_root/lib"
-  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "gstreamer" "$(basename "$gstreamer_root")"
+  copy_nix_executable_closure "$source_scanner" "$payload_root/libexec/gstreamer-1.0"
+
+  for plugin_root in "${gstreamer_plugin_roots[@]}"; do
+    plugin_dir="$plugin_root/lib/gstreamer-1.0"
+    if [[ ! -d "$plugin_dir" ]]; then
+      echo "GStreamer plugin directory not found: $plugin_dir" >&2
+      exit 65
+    fi
+
+    while IFS= read -r plugin_path; do
+      require_x86_64_macho_dylib "$plugin_path"
+      copy_nix_dylib_closure "$plugin_path" "$payload_root/lib/gstreamer-1.0"
+      copied_plugins=$((copied_plugins + 1))
+    done < <(/usr/bin/find "$plugin_dir" -maxdepth 1 -type f -name '*.dylib' -print)
+  done
+
+  if [[ "$copied_plugins" -eq 0 ]]; then
+    echo "No GStreamer plugins were copied." >&2
+    exit 65
+  fi
+  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "gstreamer" "$(basename "$gstreamer_root")+plugins"
   archive_payload "$payload_root" "$archive_path"
 }
 
