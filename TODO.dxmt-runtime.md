@@ -56,31 +56,34 @@ runtime/
 - [x] Add a Wine32-on-64 launch smoke that runs the runtime's 32-bit
       `cmd.exe` against an assembled Konyak runtime stack.
 - [ ] Ensure local `macos-vulkan-wine-smoke` passes with that Wine.
-- [ ] Add a Nix DXMT package that builds locally on macOS before Actions.
-- [ ] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's
+- [x] Add a Nix DXMT package that builds locally on macOS before Actions.
+- [x] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's
       Metal compiler is delivered by Xcode outside the Nix store.
 - [x] Verify DXMT output contains x86_64 `winemetal.so` plus both x86_64 and
       i386 `winemetal.dll`, `d3d11.dll`, `dxgi.dll`, and `d3d10core.dll`.
 - [ ] Add Wine-side DXMT prerequisites if the package requires hidden
       `winemac.drv` API exports.
-- [ ] Keep DXVK packaging independent and usable without GPTK.
+- [x] Keep DXVK packaging independent and usable without GPTK.
+      The current `dxvk-macos` component combines the pinned Gcenx DXVK-macOS
+      DLLs with upstream DXVK `v1.10.3` only for missing `d3d10.dll` and
+      `d3d10_1.dll`, and is checked by `scripts/check-dxvk-component.zsh`.
 - [ ] Change Konyak installer behavior so GPTK import never overwrites
       `lib/wine/*` directly.
 - [ ] Add backend enum support in Konyak CLI/UI:
       `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
-- [ ] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and
+- [x] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and
       `DYLD_LIBRARY_PATH` generation.
 - [ ] Add local probes:
       - Vulkan/MoltenVK smoke for DXVK base.
       - `ntdll.__wine_unix_call` export check for GPTK.
       - DXMT DLL load probe.
       - GPTK D3D12/DXGI DLL load probe.
-- [ ] Add GitHub Actions only after local Nix DXMT builds pass.
+- [x] Add GitHub Actions only after local Nix DXMT builds pass.
 
 ## Current Known Constraints
 
-- `nixpkgs-unstable` no longer exposes `llvmPackages_15`.
-- DXMT currently documents LLVM 15 as the expected LLVM version.
+- DXMT currently uses the repository's LLVM 15 input because upstream DXMT
+  expects LLVM 15.
 - DXMT cross build needs a Wine install/build path and a Windows cross compiler.
 - Xcode 26+ can require `xcodebuild -downloadComponent MetalToolchain` before
   `xcrun -sdk macosx metal` works.

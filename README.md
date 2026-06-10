@@ -51,6 +51,17 @@ Runtime archives must include:
 - Wine32-on-64 payload for 32-bit Windows executables
 - a Konyak-compatible runtime stack source manifest
 
+The release manifest is assembled from separately published component archives:
+
+- CrossOver-derived Wine runtime
+- DXVK-macOS
+- DXMT
+- MoltenVK
+- GStreamer
+- FreeType
+- wine-mono
+- winetricks
+
 Release builds verify Wine32-on-64 in two stages:
 
 1. `scripts/check-wine32on64-runtime.zsh result` checks the Wine-only payload
@@ -59,6 +70,13 @@ Release builds verify Wine32-on-64 in two stages:
    runtime's 32-bit `cmd.exe` through Wine32-on-64. This smoke test requires an
    assembled runtime stack with component archives overlaid, including FreeType;
    it is not expected to pass against the Wine-only `result` artifact.
+
+DXVK-macOS is packaged independently from GPTK/D3DMetal. The pinned Gcenx
+DXVK-macOS archive provides `dxgi.dll`, `d3d9.dll`, `d3d10core.dll`, and
+`d3d11.dll`; the runtime packaging supplements only `d3d10.dll` and
+`d3d10_1.dll` from upstream DXVK `v1.10.3`. Release builds run
+`scripts/check-dxvk-component.zsh` against the DXVK component archive and the
+assembled smoke runtime so both i386 and x86_64 Windows payloads stay complete.
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.
