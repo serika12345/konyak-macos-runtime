@@ -214,6 +214,16 @@ jobs:
               "$gstreamer_root" \
               "$freetype_root"
 
+      - name: Verify DXVK component
+        run: |
+          dxvk_component_root="$RUNNER_TEMP/konyak-dxvk-component"
+          rm -rf "$dxvk_component_root"
+          mkdir -p "$dxvk_component_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-dxvk-macos.tar.zst \
+            -C "$dxvk_component_root"
+          ./scripts/check-dxvk-component.zsh "$dxvk_component_root"
+
       - name: Upload binary component artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -336,6 +346,7 @@ jobs:
           ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
+          ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   publish-release:

@@ -25,9 +25,13 @@ resolve_gnu_tar() {
 tar_bin="$(resolve_gnu_tar)" || exit 65
 readonly tar_bin
 
-readonly dxvk_version="v1.10.3-20230507"
-readonly dxvk_url="https://github.com/Gcenx/DXVK-macOS/releases/download/v1.10.3-20230507/dxvk-macOS-async-v1.10.3-20230507.tar.gz"
-readonly dxvk_sha256="f67d99d0a8eeedd7d406b283a3df9f939b5965acb00efcb33d0c6235c195a516"
+readonly dxvk_macos_version="v1.10.3-20230507"
+readonly dxvk_macos_url="https://github.com/Gcenx/DXVK-macOS/releases/download/v1.10.3-20230507/dxvk-macOS-async-v1.10.3-20230507.tar.gz"
+readonly dxvk_macos_sha256="f67d99d0a8eeedd7d406b283a3df9f939b5965acb00efcb33d0c6235c195a516"
+readonly dxvk_d3d10_version="1.10.3"
+readonly dxvk_d3d10_url="https://github.com/doitsujin/dxvk/releases/download/v${dxvk_d3d10_version}/dxvk-${dxvk_d3d10_version}.tar.gz"
+readonly dxvk_d3d10_sha256="8d1a3c912761b450c879f98478ae64f6f6639e40ce6848170a0f6b8596fd53c6"
+readonly dxvk_component_version="${dxvk_macos_version}+dxvk-${dxvk_d3d10_version}-d3d10"
 
 readonly moltenvk_version="v1.4.1"
 readonly moltenvk_url="https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-macos.tar"
@@ -190,19 +194,24 @@ copy_nix_dylib_closure() {
 }
 
 package_dxvk_macos() {
-  local archive_cache="$cache_dir/dxvk-macOS-async-$dxvk_version.tar.gz"
+  local archive_cache="$cache_dir/dxvk-macOS-async-$dxvk_macos_version.tar.gz"
+  local d3d10_archive_cache="$cache_dir/dxvk-$dxvk_d3d10_version.tar.gz"
   local work_root="$dist_dir/work/dxvk-macos"
   local extract_root="$work_root/extract"
+  local d3d10_extract_root="$work_root/extract-d3d10"
   local payload_root="$work_root/payload"
   local archive_path="$dist_dir/konyak-macos-dxvk-macos.tar.zst"
 
-  download_if_missing "$dxvk_url" "$archive_cache" "$dxvk_sha256"
+  download_if_missing "$dxvk_macos_url" "$archive_cache" "$dxvk_macos_sha256"
+  download_if_missing "$dxvk_d3d10_url" "$d3d10_archive_cache" "$dxvk_d3d10_sha256"
   reset_dir "$work_root"
   mkdir -p \
     "$extract_root" \
+    "$d3d10_extract_root" \
     "$payload_root/lib/dxvk/x86_64-windows" \
     "$payload_root/lib/dxvk/i386-windows"
   "$tar_bin" --warning=no-unknown-keyword -xzf "$archive_cache" -C "$extract_root"
+  "$tar_bin" --warning=no-unknown-keyword -xzf "$d3d10_archive_cache" -C "$d3d10_extract_root"
 
   for dll_name in dxgi.dll d3d9.dll d3d10core.dll d3d11.dll; do
     local source_x64=""
@@ -217,7 +226,20 @@ package_dxvk_macos() {
     cp -f "$source_x32" "$payload_root/lib/dxvk/i386-windows/$dll_name"
   done
 
-  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "dxvk-macos" "$dxvk_version"
+  for dll_name in d3d10.dll d3d10_1.dll; do
+    local source_x64=""
+    local source_x32=""
+    source_x64="$(find "$d3d10_extract_root" -path "*/x64/$dll_name" -type f | head -n 1)"
+    source_x32="$(find "$d3d10_extract_root" -path "*/x32/$dll_name" -type f | head -n 1)"
+    if [[ -z "$source_x64" || -z "$source_x32" ]]; then
+      echo "DXVK upstream archive does not contain x64/x32 $dll_name." >&2
+      exit 65
+    fi
+    cp -f "$source_x64" "$payload_root/lib/dxvk/x86_64-windows/$dll_name"
+    cp -f "$source_x32" "$payload_root/lib/dxvk/i386-windows/$dll_name"
+  done
+
+  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "dxvk-macos" "$dxvk_component_version"
   archive_payload "$payload_root" "$archive_path"
 }
 

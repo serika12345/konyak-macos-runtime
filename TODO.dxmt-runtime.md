@@ -25,6 +25,18 @@ runtime/
   lib/wine/x86_64-unix/...
   components/
     dxvk/
+      i386-windows/d3d9.dll
+      i386-windows/d3d10.dll
+      i386-windows/d3d10_1.dll
+      i386-windows/d3d10core.dll
+      i386-windows/d3d11.dll
+      i386-windows/dxgi.dll
+      x86_64-windows/d3d9.dll
+      x86_64-windows/d3d10.dll
+      x86_64-windows/d3d10_1.dll
+      x86_64-windows/d3d10core.dll
+      x86_64-windows/d3d11.dll
+      x86_64-windows/dxgi.dll
     dxmt/
       i386-windows/d3d11.dll
       i386-windows/dxgi.dll
