@@ -56,6 +56,7 @@ The release manifest is assembled from separately published component archives:
 - CrossOver-derived Wine runtime
 - DXVK-macOS
 - DXMT
+- vkd3d
 - MoltenVK
 - GStreamer, including plugins and `gst-plugin-scanner`
 - FreeType
@@ -83,6 +84,14 @@ GStreamer is packaged with `libgstreamer-1.0.0.dylib`, plugin dylibs under
 builds run `scripts/check-gstreamer-component.zsh` against the component
 archive and the assembled smoke runtime, rejecting missing representative media
 plugins or unpackaged `/nix/store/*.dylib` references.
+
+vkd3d is built from the pinned CrossOver FOSS source archive as a separate
+component. Release builds reuse the already-built Wine runtime artifact for
+`widl`, build both i386 and x86_64 Windows DLLs, and package
+`libvkd3d-1.dll`, `libvkd3d-shader-1.dll`, and `libvkd3d-utils-1.dll` into
+Wine's standard `lib/wine/{i386,x86_64}-windows` directories. The parent
+Konyak repository must consume this component archive instead of adding vkd3d
+dependencies to its own Nix flake.
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.

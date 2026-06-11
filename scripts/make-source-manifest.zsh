@@ -29,6 +29,9 @@ component_version() {
     dxmt)
       echo "$(jq -r '.version' "$repo_root/sources/dxmt.json")-konyak.0"
       ;;
+    vkd3d)
+      echo "crossover-${version}-vkd3d-1.18-konyak.0"
+      ;;
     dxvk-macos)
       echo "v1.10.3-20230507+dxvk-1.10.3-d3d10"
       ;;

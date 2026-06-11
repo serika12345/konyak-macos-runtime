@@ -30,6 +30,7 @@ runtime_root="$runtime_parent/$(basename "$runtime_root")"
 archives=(
   konyak-macos-wine-runtime.tar.zst
   konyak-macos-dxmt.tar.zst
+  konyak-macos-vkd3d.tar.zst
   konyak-macos-dxvk-macos.tar.zst
   konyak-macos-moltenvk.tar.zst
   konyak-macos-gstreamer.tar.zst
@@ -55,6 +56,7 @@ chmod -R u+w "$runtime_root"
 
 component_archives=(
   konyak-macos-dxmt.tar.zst
+  konyak-macos-vkd3d.tar.zst
   konyak-macos-dxvk-macos.tar.zst
   konyak-macos-moltenvk.tar.zst
   konyak-macos-gstreamer.tar.zst

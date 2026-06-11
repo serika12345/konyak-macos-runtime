@@ -78,6 +78,12 @@ runtime/
       requires `nvapi64` and canonical `nvngx` files, normalizes older
       `nvngx-on-metalfx` source names, and keeps GPTK/D3DMetal D3D10 out of
       the required payload because D3D10 is owned by DXVK/DXMT components.
+- [x] Add CrossOver-derived vkd3d as a runtime component.
+      The component is built from the pinned CrossOver FOSS source archive,
+      reuses the Wine runtime artifact for `widl`, ships both i386 and x86_64
+      `libvkd3d-1.dll`, `libvkd3d-shader-1.dll`, and
+      `libvkd3d-utils-1.dll`, and is checked by
+      `scripts/check-vkd3d-component.zsh`.
 - [ ] Change Konyak installer behavior so GPTK import never overwrites
       `lib/wine/*` directly.
 - [ ] Add backend enum support in Konyak CLI/UI:
