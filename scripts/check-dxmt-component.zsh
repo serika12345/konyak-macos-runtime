@@ -17,6 +17,8 @@ required_paths=(
   "x86_64-windows/d3d11.dll"
   "x86_64-windows/dxgi.dll"
   "x86_64-windows/d3d10core.dll"
+  "x86_64-windows/nvapi64.dll"
+  "x86_64-windows/nvngx.dll"
   "i386-windows/winemetal.dll"
   "i386-windows/d3d11.dll"
   "i386-windows/dxgi.dll"
@@ -51,6 +53,11 @@ for dll_name in winemetal.dll d3d11.dll dxgi.dll d3d10core.dll; do
     "x86_64 DXMT $dll_name"
   assert_file_kind "i386-windows/$dll_name" "PE32 executable" \
     "i386 DXMT $dll_name"
+done
+
+for dll_name in nvapi64.dll nvngx.dll; do
+  assert_file_kind "x86_64-windows/$dll_name" "PE32+ executable" \
+    "x86_64 DXMT $dll_name"
 done
 
 assert_file_kind "x86_64-unix/winemetal.so" "Mach-O 64-bit" \

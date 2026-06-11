@@ -101,6 +101,7 @@ endif"
     setup_dxmt_build() {
       local cross_file="$1"
       local build_dir="$2"
+      local enable_nvidia_shims="$3"
 
       meson setup \
         --cross-file "$cross_file" \
@@ -110,8 +111,8 @@ endif"
         -Dwine_install_path=${wineRuntime} \
         -Dwine_builtin_dll=false \
         -Denable_tests=false \
-        -Denable_nvapi=false \
-        -Denable_nvngx=false \
+        -Denable_nvapi="$enable_nvidia_shims" \
+        -Denable_nvngx="$enable_nvidia_shims" \
         "$build_dir" .
     }
 
@@ -123,8 +124,8 @@ c_link_args = ['-L${pkgsCross.mingw32.windows.mcfgthreads}/lib']
 cpp_link_args = ['-L${pkgsCross.mingw32.windows.mcfgthreads}/lib']
 EOF
 
-    setup_dxmt_build build-win64.txt build-win64
-    setup_dxmt_build "$TMPDIR/build-win32-konyak.txt" build-win32
+    setup_dxmt_build build-win64.txt build-win64 true
+    setup_dxmt_build "$TMPDIR/build-win32-konyak.txt" build-win32 false
 
     runHook postConfigure
   '';
@@ -240,6 +241,7 @@ EOF
 
     cp LICENSE "$out/Licenses/DXMT-LGPL-2.1-or-later.txt"
     cp COPYING.LIB "$out/Licenses/LGPL-2.1.txt"
+    cp external/nvapi/License.txt "$out/Licenses/NVIDIA-NVAPI-License.txt"
 
     cat >"$out/SOURCE.txt" <<EOF
 Component: Konyak macOS DXMT runtime component
@@ -247,6 +249,7 @@ Derived from: DXMT
 DXMT source URL: ${dxmtSource.url}
 DXMT source revision: ${dxmtSource.rev}
 DXMT source hash: ${dxmtSource.hash}
+NVIDIA shim DLLs: nvapi64.dll and nvngx.dll are built from the pinned DXMT source tree
 Build recipe: Nix flake in serika12345/konyak-macos-runtime
 Wine runtime used for build: ${wineRuntime}
 EOF
@@ -264,6 +267,7 @@ EOF
   },
   "wineRuntime": "${wineRuntime}",
   "wineBuiltinDll": false,
+  "nvidiaShimDlls": ["nvapi64.dll", "nvngx.dll"],
   "architectures": ["i386", "x86_64"]
 }
 EOF
@@ -273,6 +277,8 @@ EOF
       "$out/x86_64-windows/d3d11.dll" \
       "$out/x86_64-windows/dxgi.dll" \
       "$out/x86_64-windows/d3d10core.dll" \
+      "$out/x86_64-windows/nvapi64.dll" \
+      "$out/x86_64-windows/nvngx.dll" \
       "$out/i386-windows/winemetal.dll" \
       "$out/i386-windows/d3d11.dll" \
       "$out/i386-windows/dxgi.dll" \

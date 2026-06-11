@@ -79,6 +79,12 @@ DXVK-macOS archive provides `dxgi.dll`, `d3d9.dll`, `d3d10core.dll`, and
 `scripts/check-dxvk-component.zsh` against the DXVK component archive and the
 assembled smoke runtime so both i386 and x86_64 Windows payloads stay complete.
 
+DXMT is packaged as a separate component and release builds run
+`scripts/check-dxmt-component.zsh` against the DXMT archive. The required DXMT
+payload includes both i386 and x86_64 `winemetal.dll`, `d3d11.dll`, `dxgi.dll`,
+and `d3d10core.dll`, x86_64 `winemetal.so`, and the x86_64 NVIDIA shim DLLs
+`nvapi64.dll` and `nvngx.dll`.
+
 GStreamer is packaged with `libgstreamer-1.0.0.dylib`, plugin dylibs under
 `lib/gstreamer-1.0`, and `libexec/gstreamer-1.0/gst-plugin-scanner`. Release
 builds run `scripts/check-gstreamer-component.zsh` against the component

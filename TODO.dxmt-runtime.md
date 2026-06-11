@@ -45,6 +45,8 @@ runtime/
       x86_64-windows/d3d11.dll
       x86_64-windows/dxgi.dll
       x86_64-windows/d3d10core.dll
+      x86_64-windows/nvapi64.dll
+      x86_64-windows/nvngx.dll
       x86_64-windows/winemetal.dll
       x86_64-unix/winemetal.so
     gptk-d3dmetal/
@@ -69,6 +71,9 @@ runtime/
       Metal compiler is delivered by Xcode outside the Nix store.
 - [x] Verify DXMT output contains x86_64 `winemetal.so` plus both x86_64 and
       i386 `winemetal.dll`, `d3d11.dll`, `dxgi.dll`, and `d3d10core.dll`.
+- [x] Verify DXMT output contains x86_64 NVIDIA shim DLLs `nvapi64.dll` and
+      `nvngx.dll` while keeping the i386 DXMT payload limited to the existing
+      DXMT DLL set.
 - [ ] Add Wine-side DXMT prerequisites if the package requires hidden
       `winemac.drv` API exports.
 - [x] Keep DXVK packaging independent and usable without GPTK.
@@ -118,3 +123,6 @@ runtime/
 - DXMT now builds both x86_64 and i386 Windows DLLs. The Unix-side
   `winemetal.so` remains x86_64 because the runtime is Wine32-on-64 and has no
   i386 Unix host path.
+- DXMT's NVIDIA compatibility shim DLLs are currently x86_64-only in the
+  Konyak component because the CrossOver comparison target only ships
+  `nvapi64.dll` and `nvngx.dll` under the x86_64 DXMT path.
