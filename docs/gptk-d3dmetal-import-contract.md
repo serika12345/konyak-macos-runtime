@@ -35,19 +35,17 @@ symlinks. The required runtime paths are:
 lib/external/D3DMetal.framework
 lib/external/libd3dshared.dylib
 lib/wine/x86_64-windows/atidxx64.dll
-lib/wine/x86_64-windows/d3d10.dll
 lib/wine/x86_64-windows/d3d11.dll
 lib/wine/x86_64-windows/d3d12.dll
 lib/wine/x86_64-windows/dxgi.dll
 lib/wine/x86_64-windows/nvapi64.dll
-lib/wine/x86_64-windows/nvngx-on-metalfx.dll
+lib/wine/x86_64-windows/nvngx.dll
 lib/wine/x86_64-unix/atidxx64.so
-lib/wine/x86_64-unix/d3d10.so
 lib/wine/x86_64-unix/d3d11.so
 lib/wine/x86_64-unix/d3d12.so
 lib/wine/x86_64-unix/dxgi.so
 lib/wine/x86_64-unix/nvapi64.so
-lib/wine/x86_64-unix/nvngx-on-metalfx.so
+lib/wine/x86_64-unix/nvngx.so
 ```
 
 These Unix library paths must remain symlinks:
@@ -62,6 +60,11 @@ Do not copy those symlinks as independent Mach-O files. The D3DMetal path was
 validated only when the Apple symlink structure was preserved in Wine's
 standard `lib/wine/x86_64-unix` search location.
 
+CrossOver 26.1 names the NVIDIA NGX shim `nvngx.dll` / `nvngx.so`. Konyak uses
+that name as the canonical runtime layout. Import tools may accept older
+`nvngx-on-metalfx` inputs as source files, but must normalize them to
+`nvngx.dll` / `nvngx.so` in the installed runtime.
+
 ## Launch Contract
 
 Konyak must set the runtime environment when GPTK/D3DMetal is selected:
@@ -70,7 +73,7 @@ Konyak must set the runtime environment when GPTK/D3DMetal is selected:
 CX_APPLEGPTK_LIBD3DSHARED_PATH=<runtime>/lib/external/libd3dshared.dylib
 DYLD_FRAMEWORK_PATH=<runtime>/lib/external
 DYLD_LIBRARY_PATH=<runtime>/lib/external:<runtime>/lib/wine/x86_64-unix:<runtime library paths>
-WINEDLLOVERRIDES=dxgi,d3d11,d3d12=n,b
+WINEDLLOVERRIDES=dxgi,d3d11,d3d12,nvapi64,nvngx=n,b
 D3DM_SUPPORT_DXR=1
 ```
 

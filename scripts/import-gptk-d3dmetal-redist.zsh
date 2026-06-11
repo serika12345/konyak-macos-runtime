@@ -53,13 +53,24 @@ find_redist() {
   local nested
 
   if [[ -d "$candidate" ]]; then
-    if [[ -d "$candidate/lib/external" && -d "$candidate/lib/wine" ]]; then
+    if [[ -d "$candidate/external" && -d "$candidate/wine" ]]; then
       redist_root="$candidate"
+      return 0
+    fi
+
+    if [[ -d "$candidate/lib/external" && -d "$candidate/lib/wine" ]]; then
+      redist_root="$candidate/lib"
       return 0
     fi
 
     nested="$(find "$candidate" -maxdepth 3 -type d -name redist | head -n 1)"
     if [[ -n "$nested" && -d "$nested/lib/external" && -d "$nested/lib/wine" ]]; then
+      redist_root="$nested/lib"
+      return 0
+    fi
+
+    nested="$candidate/Contents/SharedSupport/CrossOver/lib64/apple_gptk"
+    if [[ -d "$nested/external" && -d "$nested/wine" ]]; then
       redist_root="$nested"
       return 0
     fi
@@ -71,7 +82,7 @@ find_redist() {
 
     nested="$(find "$mounted" -maxdepth 3 -type d -name redist | head -n 1)"
     if [[ -n "$nested" && -d "$nested/lib/external" && -d "$nested/lib/wine" ]]; then
-      redist_root="$nested"
+      redist_root="$nested/lib"
       return 0
     fi
 
@@ -101,6 +112,31 @@ require_symlink() {
     fail "GPTK redist symlink target mismatch for $path: expected $target, got $actual_target"
 }
 
+resolve_redist_path() {
+  local relative_path="$1"
+  local candidate
+  local -a candidates
+
+  candidates=("$relative_path")
+  case "$relative_path" in
+    wine/x86_64-windows/nvngx.dll)
+      candidates=(wine/x86_64-windows/nvngx.dll wine/x86_64-windows/nvngx-on-metalfx.dll)
+      ;;
+    wine/x86_64-unix/nvngx.so)
+      candidates=(wine/x86_64-unix/nvngx.so wine/x86_64-unix/nvngx-on-metalfx.so)
+      ;;
+  esac
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -e "$redist_root/$candidate" ]]; then
+      print -r -- "$redist_root/$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 find_redist "$source_path" ||
   fail "Could not find GPTK redist payload in: $source_path"
 
@@ -110,52 +146,66 @@ find_redist "$source_path" ||
   fail "Runtime root does not look like a Konyak x86_64 Wine runtime: $runtime_root"
 
 required_paths=(
-  lib/external/D3DMetal.framework
-  lib/external/libd3dshared.dylib
-  lib/wine/x86_64-windows/atidxx64.dll
-  lib/wine/x86_64-windows/d3d10.dll
-  lib/wine/x86_64-windows/d3d11.dll
-  lib/wine/x86_64-windows/d3d12.dll
-  lib/wine/x86_64-windows/dxgi.dll
-  lib/wine/x86_64-windows/nvapi64.dll
-  lib/wine/x86_64-windows/nvngx-on-metalfx.dll
-  lib/wine/x86_64-unix/atidxx64.so
-  lib/wine/x86_64-unix/d3d10.so
-  lib/wine/x86_64-unix/d3d11.so
-  lib/wine/x86_64-unix/d3d12.so
-  lib/wine/x86_64-unix/dxgi.so
-  lib/wine/x86_64-unix/nvapi64.so
-  lib/wine/x86_64-unix/nvngx-on-metalfx.so
+  external/D3DMetal.framework
+  external/libd3dshared.dylib
+  wine/x86_64-windows/atidxx64.dll
+  wine/x86_64-windows/d3d11.dll
+  wine/x86_64-windows/d3d12.dll
+  wine/x86_64-windows/dxgi.dll
+  wine/x86_64-windows/nvapi64.dll
+  wine/x86_64-windows/nvngx.dll
+  wine/x86_64-unix/atidxx64.so
+  wine/x86_64-unix/d3d11.so
+  wine/x86_64-unix/d3d12.so
+  wine/x86_64-unix/dxgi.so
+  wine/x86_64-unix/nvapi64.so
+  wine/x86_64-unix/nvngx.so
 )
 
 local_path=
+source_local_path=
 for local_path in "${required_paths[@]}"; do
-  require_path "$redist_root/$local_path"
+  source_local_path="$(resolve_redist_path "$local_path")" ||
+    fail "GPTK redist is missing required path: $redist_root/$local_path"
+  require_path "$source_local_path"
 done
 
-require_symlink "$redist_root/lib/wine/x86_64-unix/d3d11.so" "../../external/libd3dshared.dylib"
-require_symlink "$redist_root/lib/wine/x86_64-unix/d3d12.so" "../../external/libd3dshared.dylib"
-require_symlink "$redist_root/lib/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
+require_symlink "$redist_root/wine/x86_64-unix/d3d11.so" "../../external/libd3dshared.dylib"
+require_symlink "$redist_root/wine/x86_64-unix/d3d12.so" "../../external/libd3dshared.dylib"
+require_symlink "$redist_root/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
 
 mkdir -p \
   "$runtime_root/lib/external" \
   "$runtime_root/lib/wine/x86_64-windows" \
   "$runtime_root/lib/wine/x86_64-unix"
 
-rsync -a --delete "$redist_root/lib/external/" "$runtime_root/lib/external/"
-rsync -a "$redist_root/lib/wine/x86_64-windows/" "$runtime_root/lib/wine/x86_64-windows/"
+rsync -a --delete "$redist_root/external/" "$runtime_root/lib/external/"
+rsync -a "$redist_root/wine/x86_64-windows/" "$runtime_root/lib/wine/x86_64-windows/"
+
+for local_path in \
+  atidxx64.dll \
+  d3d11.dll \
+  d3d12.dll \
+  dxgi.dll \
+  nvapi64.dll \
+  nvngx.dll
+do
+  source_local_path="$(resolve_redist_path "wine/x86_64-windows/$local_path")"
+  rm -f "$runtime_root/lib/wine/x86_64-windows/$local_path"
+  cp -a "$source_local_path" "$runtime_root/lib/wine/x86_64-windows/$local_path"
+done
 
 for local_path in \
   atidxx64.so \
-  d3d10.so \
   d3d11.so \
   d3d12.so \
   dxgi.so \
   nvapi64.so \
-  nvngx-on-metalfx.so
+  nvngx.so
 do
+  source_local_path="$(resolve_redist_path "wine/x86_64-unix/$local_path")"
   rm -f "$runtime_root/lib/wine/x86_64-unix/$local_path"
-  cp -a "$redist_root/lib/wine/x86_64-unix/$local_path" "$runtime_root/lib/wine/x86_64-unix/$local_path"
+  cp -a "$source_local_path" "$runtime_root/lib/wine/x86_64-unix/$local_path"
 done
 
 xattr -dr com.apple.quarantine \

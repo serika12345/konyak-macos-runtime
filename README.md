@@ -104,4 +104,7 @@ scripts/import-gptk-d3dmetal-redist.zsh \
 
 The import script overlays the nested GPTK `redist` payload into Wine's
 standard `lib/external` and `lib/wine/x86_64-*` locations and preserves the
-required D3DMetal symlinks.
+required D3DMetal symlinks. It also accepts CrossOver.app's
+`Contents/SharedSupport/CrossOver/lib64/apple_gptk` payload, imports the
+NVIDIA shim files `nvapi64` and `nvngx`, and normalizes older
+`nvngx-on-metalfx` source names to the canonical `nvngx` runtime layout.

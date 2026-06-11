@@ -73,6 +73,11 @@ runtime/
       playback/typefind, MP4/WAV, and Apple media plugin dylibs under
       `lib/gstreamer-1.0`, includes `libexec/gstreamer-1.0/gst-plugin-scanner`,
       and is checked by `scripts/check-gstreamer-component.zsh`.
+- [x] Align GPTK/D3DMetal NVIDIA shim import with CrossOver 26.1.
+      The import contract now accepts CrossOver.app's `apple_gptk` payload,
+      requires `nvapi64` and canonical `nvngx` files, normalizes older
+      `nvngx-on-metalfx` source names, and keeps GPTK/D3DMetal D3D10 out of
+      the required payload because D3D10 is owned by DXVK/DXMT components.
 - [ ] Change Konyak installer behavior so GPTK import never overwrites
       `lib/wine/*` directly.
 - [ ] Add backend enum support in Konyak CLI/UI:

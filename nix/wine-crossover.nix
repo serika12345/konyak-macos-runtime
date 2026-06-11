@@ -460,19 +460,17 @@ ${lib.concatMapStringsSep ",\n" (path: "      \"${path}\"") wine32On64RequiredPa
       "lib/external/D3DMetal.framework",
       "lib/external/libd3dshared.dylib",
       "lib/wine/x86_64-windows/atidxx64.dll",
-      "lib/wine/x86_64-windows/d3d10.dll",
       "lib/wine/x86_64-windows/d3d11.dll",
       "lib/wine/x86_64-windows/d3d12.dll",
       "lib/wine/x86_64-windows/dxgi.dll",
       "lib/wine/x86_64-windows/nvapi64.dll",
-      "lib/wine/x86_64-windows/nvngx-on-metalfx.dll",
+      "lib/wine/x86_64-windows/nvngx.dll",
       "lib/wine/x86_64-unix/atidxx64.so",
-      "lib/wine/x86_64-unix/d3d10.so",
       "lib/wine/x86_64-unix/d3d11.so",
       "lib/wine/x86_64-unix/d3d12.so",
       "lib/wine/x86_64-unix/dxgi.so",
       "lib/wine/x86_64-unix/nvapi64.so",
-      "lib/wine/x86_64-unix/nvngx-on-metalfx.so"
+      "lib/wine/x86_64-unix/nvngx.so"
     ],
     "requiredSymlinks": [
       {
