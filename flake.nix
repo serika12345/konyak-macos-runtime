@@ -77,6 +77,7 @@
             pkgs.meson
             pkgs.ninja
             pkgs.pkg-config
+            pkgs.pkgsCross.mingwW64.stdenv.cc
             pkgs.zstd
           ];
         };

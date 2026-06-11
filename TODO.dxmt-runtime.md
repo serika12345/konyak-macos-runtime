@@ -65,7 +65,6 @@ runtime/
 - [x] Build and package CrossOver-derived Wine in Konyak runtime layout.
 - [x] Add a Wine32-on-64 launch smoke that runs the runtime's 32-bit
       `cmd.exe` against an assembled Konyak runtime stack.
-- [ ] Ensure local `macos-vulkan-wine-smoke` passes with that Wine.
 - [x] Add a Nix DXMT package that builds locally on macOS before Actions.
 - [x] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's
       Metal compiler is delivered by Xcode outside the Nix store.
@@ -106,12 +105,32 @@ runtime/
       `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
 - [x] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and
       `DYLD_LIBRARY_PATH` generation.
-- [ ] Add local probes:
-      - Vulkan/MoltenVK smoke for DXVK base.
-      - `ntdll.__wine_unix_call` export check for GPTK.
-      - DXMT DLL load probe.
-      - GPTK D3D12/DXGI DLL load probe.
 - [x] Add GitHub Actions only after local Nix DXMT builds pass.
+
+## Runtime Smoke CI Checklist
+
+These checks care about runtime behavior, not binary identity with CrossOver.
+Keep jobs narrow so a failed backend smoke can be rerun without rebuilding the
+Wine runtime or unrelated components.
+
+- [x] Keep release payload checks for Wine32-on-64, DXVK, DXMT, vkd3d, and
+      GStreamer.
+- [x] Keep assembled runtime launch smoke for 32-bit `cmd.exe`.
+- [x] Add headless Windows probe executables built with mingw inside the
+      runtime submodule.
+      - [x] D3D11 device smoke for DXVK.
+      - [x] D3D11 device smoke for DXMT.
+      - [x] D3D12 device smoke for vkd3d.
+- [x] Add backend smoke runner scripts that create a temporary `WINEPREFIX`,
+      apply backend-specific `WINEDLLPATH` and `WINEDLLOVERRIDES`, enforce a
+      timeout, and print diagnostics on failure.
+- [x] Add runtime Actions jobs for each backend smoke after artifact assembly:
+      `smoke-dxvk-d3d11`, `smoke-dxmt-d3d11`, and `smoke-vkd3d-d3d12`.
+- [ ] Add MoltenVK/Vulkan smoke after the Direct3D backend probes are stable.
+- [ ] Keep GPTK/D3DMetal smoke as local/manual workflow coverage because the
+      payload is user-provided and not redistributed by this repository.
+      - [ ] `ntdll.__wine_unix_call` compatibility check.
+      - [ ] GPTK D3D12/DXGI device smoke.
 
 ## Current Known Constraints
 

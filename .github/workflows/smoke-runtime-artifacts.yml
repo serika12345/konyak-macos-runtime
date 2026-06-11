@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   smoke-wine32on64:
-    name: Verify Wine32-on-64 launch smoke from artifacts
+    name: Verify runtime smoke from artifacts
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -49,6 +49,14 @@ jobs:
           run-id: ${{ inputs.artifact_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Download vkd3d artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-vkd3d
+          path: dist
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+
       - name: Download binary component artifacts
         uses: actions/download-artifact@v4
         with:
@@ -63,4 +71,10 @@ jobs:
           ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
+          ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
+          ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxmt-d3d11"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"

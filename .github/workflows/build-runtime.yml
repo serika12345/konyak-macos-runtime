@@ -459,6 +459,174 @@ jobs:
           ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
+  smoke-dxvk-d3d11:
+    name: Verify DXVK D3D11 backend smoke
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - build-vkd3d-component
+      - package-binary-components
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download vkd3d artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-vkd3d
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
+      - name: Verify DXVK D3D11 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-dxvk-d3d11-smoke-runtime"
+          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
+
+  smoke-dxmt-d3d11:
+    name: Verify DXMT D3D11 backend smoke
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - build-vkd3d-component
+      - package-binary-components
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download vkd3d artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-vkd3d
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
+      - name: Verify DXMT D3D11 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-dxmt-d3d11-smoke-runtime"
+          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxmt-d3d11"
+
+  smoke-vkd3d-d3d12:
+    name: Verify vkd3d D3D12 backend smoke
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - build-vkd3d-component
+      - package-binary-components
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download vkd3d artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-vkd3d
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
+      - name: Verify vkd3d D3D12 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-vkd3d-d3d12-smoke-runtime"
+          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
+
   publish-release:
     name: Publish runtime release
     needs:
@@ -466,6 +634,9 @@ jobs:
       - build-vkd3d-component
       - generate-release-metadata
       - smoke-wine32on64
+      - smoke-dxvk-d3d11
+      - smoke-dxmt-d3d11
+      - smoke-vkd3d-d3d12
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30

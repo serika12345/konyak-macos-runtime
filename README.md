@@ -72,6 +72,12 @@ Release builds verify Wine32-on-64 in two stages:
    assembled runtime stack with component archives overlaid, including FreeType;
    it is not expected to pass against the Wine-only `result` artifact.
 
+Release builds also run backend smoke probes against an assembled runtime stack.
+These probes build small x86_64 Windows executables with mingw, initialize a
+temporary Wine prefix, apply the same native override DLL placement expected by
+Konyak, and verify DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device creation.
+They check runtime behavior rather than binary identity with CrossOver.
+
 DXVK-macOS is packaged independently from GPTK/D3DMetal. The pinned Gcenx
 DXVK-macOS archive provides `dxgi.dll`, `d3d9.dll`, `d3d10core.dll`, and
 `d3d11.dll`; the runtime packaging supplements only `d3d10.dll` and
