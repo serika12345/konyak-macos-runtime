@@ -48,6 +48,14 @@ runtime/
       x86_64-windows/winemetal.dll
       x86_64-unix/winemetal.so
     gptk-d3dmetal/
+      lib/external/D3DMetal.framework
+      lib/external/libd3dshared.dylib
+      lib/wine/x86_64-windows/d3d11.dll
+      lib/wine/x86_64-windows/d3d12.dll
+      lib/wine/x86_64-windows/dxgi.dll
+      lib/wine/x86_64-windows/nvapi64.dll
+      lib/wine/x86_64-windows/nvngx.dll
+      lib/wine/x86_64-unix/...
 ```
 
 ## Implementation Checklist
@@ -84,8 +92,11 @@ runtime/
       `libvkd3d-1.dll`, `libvkd3d-shader-1.dll`, and
       `libvkd3d-utils-1.dll`, and is checked by
       `scripts/check-vkd3d-component.zsh`.
-- [ ] Change Konyak installer behavior so GPTK import never overwrites
-      `lib/wine/*` directly.
+- [x] Change Konyak installer behavior so GPTK import never overwrites
+      `lib/wine/*` directly. User-imported GPTK/D3DMetal now installs under
+      `components/gptk-d3dmetal`, and macOS runtime reinstall/update preserves
+      and migrates the user-provided component instead of replacing it with the
+      base Wine payload.
 - [ ] Add backend enum support in Konyak CLI/UI:
       `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
 - [x] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and

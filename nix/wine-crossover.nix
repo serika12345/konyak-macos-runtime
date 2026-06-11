@@ -453,36 +453,36 @@ ${lib.concatMapStringsSep ",\n" (path: "      \"${path}\"") wine32On64RequiredPa
   "supportsExternalGptkD3DMetal": ${builtins.toJSON supportsExternalGptkD3DMetal},
   "externalGptkD3DMetal": {
     "loaderEnvironmentVariable": "CX_APPLEGPTK_LIBD3DSHARED_PATH",
-    "importMode": "overlay",
+    "importMode": "isolated-component",
     "sourceRoot": "redist",
-    "runtimeRoot": ".",
+    "runtimeRoot": "components/gptk-d3dmetal",
     "requiredPaths": [
-      "lib/external/D3DMetal.framework",
-      "lib/external/libd3dshared.dylib",
-      "lib/wine/x86_64-windows/atidxx64.dll",
-      "lib/wine/x86_64-windows/d3d11.dll",
-      "lib/wine/x86_64-windows/d3d12.dll",
-      "lib/wine/x86_64-windows/dxgi.dll",
-      "lib/wine/x86_64-windows/nvapi64.dll",
-      "lib/wine/x86_64-windows/nvngx.dll",
-      "lib/wine/x86_64-unix/atidxx64.so",
-      "lib/wine/x86_64-unix/d3d11.so",
-      "lib/wine/x86_64-unix/d3d12.so",
-      "lib/wine/x86_64-unix/dxgi.so",
-      "lib/wine/x86_64-unix/nvapi64.so",
-      "lib/wine/x86_64-unix/nvngx.so"
+      "components/gptk-d3dmetal/lib/external/D3DMetal.framework",
+      "components/gptk-d3dmetal/lib/external/libd3dshared.dylib",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so",
+      "components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so"
     ],
     "requiredSymlinks": [
       {
-        "path": "lib/wine/x86_64-unix/d3d11.so",
+        "path": "components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so",
         "target": "../../external/libd3dshared.dylib"
       },
       {
-        "path": "lib/wine/x86_64-unix/d3d12.so",
+        "path": "components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so",
         "target": "../../external/libd3dshared.dylib"
       },
       {
-        "path": "lib/wine/x86_64-unix/dxgi.so",
+        "path": "components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so",
         "target": "../../external/libd3dshared.dylib"
       }
     ]

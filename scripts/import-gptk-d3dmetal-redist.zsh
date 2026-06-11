@@ -145,6 +145,8 @@ find_redist "$source_path" ||
 [[ -d "$runtime_root/lib/wine/x86_64-unix" ]] ||
   fail "Runtime root does not look like a Konyak x86_64 Wine runtime: $runtime_root"
 
+component_root="$runtime_root/components/gptk-d3dmetal"
+
 required_paths=(
   external/D3DMetal.framework
   external/libd3dshared.dylib
@@ -174,13 +176,13 @@ require_symlink "$redist_root/wine/x86_64-unix/d3d11.so" "../../external/libd3ds
 require_symlink "$redist_root/wine/x86_64-unix/d3d12.so" "../../external/libd3dshared.dylib"
 require_symlink "$redist_root/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
 
+rm -rf "$component_root"
 mkdir -p \
-  "$runtime_root/lib/external" \
-  "$runtime_root/lib/wine/x86_64-windows" \
-  "$runtime_root/lib/wine/x86_64-unix"
+  "$component_root/lib/external" \
+  "$component_root/lib/wine/x86_64-windows" \
+  "$component_root/lib/wine/x86_64-unix"
 
-rsync -a --delete "$redist_root/external/" "$runtime_root/lib/external/"
-rsync -a "$redist_root/wine/x86_64-windows/" "$runtime_root/lib/wine/x86_64-windows/"
+rsync -a --delete "$redist_root/external/" "$component_root/lib/external/"
 
 for local_path in \
   atidxx64.dll \
@@ -191,8 +193,8 @@ for local_path in \
   nvngx.dll
 do
   source_local_path="$(resolve_redist_path "wine/x86_64-windows/$local_path")"
-  rm -f "$runtime_root/lib/wine/x86_64-windows/$local_path"
-  cp -a "$source_local_path" "$runtime_root/lib/wine/x86_64-windows/$local_path"
+  rm -f "$component_root/lib/wine/x86_64-windows/$local_path"
+  cp -a "$source_local_path" "$component_root/lib/wine/x86_64-windows/$local_path"
 done
 
 for local_path in \
@@ -204,17 +206,17 @@ for local_path in \
   nvngx.so
 do
   source_local_path="$(resolve_redist_path "wine/x86_64-unix/$local_path")"
-  rm -f "$runtime_root/lib/wine/x86_64-unix/$local_path"
-  cp -a "$source_local_path" "$runtime_root/lib/wine/x86_64-unix/$local_path"
+  rm -f "$component_root/lib/wine/x86_64-unix/$local_path"
+  cp -a "$source_local_path" "$component_root/lib/wine/x86_64-unix/$local_path"
 done
 
 xattr -dr com.apple.quarantine \
-  "$runtime_root/lib/external" \
-  "$runtime_root/lib/wine/x86_64-windows" \
-  "$runtime_root/lib/wine/x86_64-unix" 2>/dev/null || true
+  "$component_root/lib/external" \
+  "$component_root/lib/wine/x86_64-windows" \
+  "$component_root/lib/wine/x86_64-unix" 2>/dev/null || true
 
-require_symlink "$runtime_root/lib/wine/x86_64-unix/d3d11.so" "../../external/libd3dshared.dylib"
-require_symlink "$runtime_root/lib/wine/x86_64-unix/d3d12.so" "../../external/libd3dshared.dylib"
-require_symlink "$runtime_root/lib/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
+require_symlink "$component_root/lib/wine/x86_64-unix/d3d11.so" "../../external/libd3dshared.dylib"
+require_symlink "$component_root/lib/wine/x86_64-unix/d3d12.so" "../../external/libd3dshared.dylib"
+require_symlink "$component_root/lib/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
 
-echo "Imported GPTK/D3DMetal redist into: $runtime_root"
+echo "Imported GPTK/D3DMetal redist into: $component_root"
