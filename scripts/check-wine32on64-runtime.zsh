@@ -9,6 +9,9 @@ if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
 fi
 
 required_paths=(
+  "bin/wine"
+  "bin/wine64"
+  "bin/wineserver"
   "lib/wine/i386-windows/cmd.exe"
   "lib/wine/i386-windows/kernel32.dll"
   "lib/wine/i386-windows/ntdll.dll"
@@ -122,6 +125,41 @@ assert_macho_has_rpath() {
   fi
 }
 
+assert_macho_exports_symbol() {
+  local relative_path="$1"
+  local expected_symbol="$2"
+  local target_path="$runtime_root/$relative_path"
+
+  if ! nm -gU "$target_path" | awk '{ print $NF }' | grep -Fx "$expected_symbol" >/dev/null; then
+    echo "$relative_path does not export required symbol $expected_symbol." >&2
+    exit 65
+  fi
+}
+
+assert_macho_uses_dependency() {
+  local relative_path="$1"
+  local expected_dependency="$2"
+  local target_path="$runtime_root/$relative_path"
+
+  if ! otool -L "$target_path" | awk 'NR > 1 { print $1 }' |
+    grep -Fx "$expected_dependency" >/dev/null; then
+    echo "$relative_path does not use required dependency $expected_dependency." >&2
+    exit 65
+  fi
+}
+
+assert_macho_rejects_dependency() {
+  local relative_path="$1"
+  local rejected_dependency="$2"
+  local target_path="$runtime_root/$relative_path"
+
+  if otool -L "$target_path" | awk 'NR > 1 { print $1 }' |
+    grep -Fx "$rejected_dependency" >/dev/null; then
+    echo "$relative_path still uses rejected dependency $rejected_dependency." >&2
+    exit 65
+  fi
+}
+
 assert_runtime_dylib_glob() {
   setopt local_options null_glob
 
@@ -139,10 +177,16 @@ assert_runtime_dylib_glob() {
 }
 
 assert_runtime_dylib_glob "GnuTLS runtime dylib" "libgnutls*.dylib"
+assert_runtime_dylib_glob "libiconv runtime dylib" "libiconv*.dylib"
 assert_runtime_dylib_glob "GSSAPI runtime dylib" "libgssapi_krb5*.dylib"
 assert_runtime_dylib_glob "Kerberos runtime dylib" "libkrb5*.dylib"
 assert_runtime_dylib_glob "OpenCL runtime dylib" "libOpenCL*.dylib"
 assert_runtime_dylib_glob "libusb runtime dylib" "libusb-1.0*.dylib"
+assert_macho_exports_symbol "lib/libiconv.2.dylib" "_libiconv"
+assert_macho_exports_symbol "lib/libiconv-darwin.2.dylib" "_iconv"
+assert_macho_uses_dependency "lib/libidn2.0.dylib" "@loader_path/libiconv.2.dylib"
+assert_macho_uses_dependency "lib/libintl.8.dylib" "@loader_path/libiconv-darwin.2.dylib"
+assert_macho_rejects_dependency "lib/libintl.8.dylib" "@loader_path/libiconv.2.dylib"
 
 assert_macho_has_rpath "lib/wine/x86_64-unix/secur32.so" "@loader_path/../../"
 assert_macho_has_rpath "lib/wine/x86_64-unix/bcrypt.so" "@loader_path/../../"

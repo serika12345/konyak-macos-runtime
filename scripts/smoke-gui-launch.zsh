@@ -1,59 +1,65 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 runtime_root="${1:-}"
-timeout_seconds="${KONYAK_WINE32ON64_SMOKE_TIMEOUT_SECONDS:-300}"
-sentinel="KONYAK_WINE32ON64_SMOKE_OK"
+probe_dir="${2:-$repo_root/.dart_tool/backend-probes}"
+timeout_seconds="${KONYAK_GUI_LAUNCH_SMOKE_TIMEOUT_SECONDS:-180}"
+sentinel="KONYAK_GUI_LAUNCH_SMOKE_OK"
 
-if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
-  echo "Usage: $0 <assembled-runtime-root>" >&2
+if [[ -z "$runtime_root" ]]; then
+  echo "Usage: $0 <assembled-runtime-root> [probe-dir]" >&2
   exit 64
 fi
 
+if [[ ! -d "$runtime_root" ]]; then
+  echo "Runtime root does not exist: $runtime_root" >&2
+  exit 65
+fi
+
 runtime_root="$(cd "$runtime_root" && pwd -P)"
-wine_executable="$runtime_root/bin/wine"
+wine_executable="$runtime_root/bin/wine64"
 wineserver_executable="$runtime_root/bin/wineserver"
-target_executable="$runtime_root/lib/wine/i386-windows/cmd.exe"
 prefix_init_executable="$runtime_root/lib/wine/x86_64-windows/cmd.exe"
+probe_path="$probe_dir/gui_launch_probe.exe"
 
 required_paths=(
   "$wine_executable"
   "$wineserver_executable"
   "$prefix_init_executable"
-  "$target_executable"
-  "$runtime_root/lib/wine/i386-windows/kernel32.dll"
-  "$runtime_root/lib/wine/i386-windows/ntdll.dll"
   "$runtime_root/lib/wine/x86_64-windows/kernel32.dll"
-  "$runtime_root/lib/wine/x86_64-windows/wow64.dll"
-  "$runtime_root/lib/wine/x86_64-windows/wow64cpu.dll"
-  "$runtime_root/lib/wine/x86_64-windows/wow64win.dll"
+  "$runtime_root/lib/wine/x86_64-windows/user32.dll"
+  "$runtime_root/lib/wine/x86_64-windows/ntdll.dll"
+  "$runtime_root/lib/wine/x86_64-unix/ntdll.so"
   "$runtime_root/lib/libfreetype.6.dylib"
   "$runtime_root/lib/libfreetype.dylib"
+  "$runtime_root/lib/gstreamer-1.0"
+  "$runtime_root/libexec/gstreamer-1.0/gst-plugin-scanner"
 )
 
 for required_path in "${required_paths[@]}"; do
   if [[ ! -e "$required_path" ]]; then
-    echo "Missing Wine32-on-64 smoke prerequisite: $required_path" >&2
-    echo "Run this smoke test against an assembled Konyak runtime stack, not the Wine-only artifact." >&2
+    echo "Missing GUI launch smoke prerequisite: $required_path" >&2
     exit 65
   fi
 done
 
-file_output="$(/usr/bin/file "$target_executable")"
-if [[ "$file_output" != *"PE32 executable"* ]]; then
-  echo "Wine32-on-64 smoke target is not a 32-bit Windows executable:" >&2
-  echo "$file_output" >&2
+if [[ ! -f "$probe_path" ]]; then
+  "$repo_root/scripts/build-backend-probes.zsh" "$probe_dir" >/dev/null
+fi
+if [[ ! -f "$probe_path" ]]; then
+  echo "GUI launch probe executable was not built: $probe_path" >&2
   exit 65
 fi
 
-freetype_file_output="$(/usr/bin/file "$runtime_root/lib/libfreetype.6.dylib")"
-if [[ "$freetype_file_output" != *"Mach-O 64-bit dynamically linked shared library x86_64"* ]]; then
-  echo "Wine32-on-64 smoke FreeType dylib is not x86_64:" >&2
-  echo "$freetype_file_output" >&2
+probe_file_output="$(/usr/bin/file "$probe_path")"
+if [[ "$probe_file_output" != *"PE32+ executable"* ]]; then
+  echo "GUI launch probe is not an x86_64 Windows executable:" >&2
+  echo "$probe_file_output" >&2
   exit 65
 fi
 
-work_root="$(mktemp -d "${TMPDIR:-/tmp}/konyak-wine32on64-smoke.XXXXXXXXXX")"
+work_root="$(mktemp -d "${TMPDIR:-/tmp}/konyak-gui-launch-smoke.XXXXXXXXXX")"
 prefix="$work_root/prefix"
 stdout_path="$work_root/stdout.log"
 stderr_path="$work_root/stderr.log"
@@ -61,6 +67,7 @@ exit_status_path="$work_root/exit-status"
 prefix_init_stdout_path="$work_root/prefix-init-stdout.log"
 prefix_init_stderr_path="$work_root/prefix-init-stderr.log"
 prefix_init_exit_status_path="$work_root/prefix-init-exit-status"
+sentinel_path="$prefix/drive_c/konyak-gui-launch-smoke-ok.txt"
 smoke_pid=""
 
 print_log_excerpt() {
@@ -69,31 +76,30 @@ print_log_excerpt() {
 
   if [[ -s "$path" ]]; then
     echo "----- $label -----" >&2
-    /usr/bin/sed -n '1,160p' "$path" >&2
+    /usr/bin/sed -n '1,200p' "$path" >&2
     echo "----- end $label -----" >&2
   fi
 }
 
 print_runtime_diagnostics() {
-  echo "----- runtime diagnostics -----" >&2
+  echo "----- GUI launch smoke diagnostics -----" >&2
   echo "runtime_root=$runtime_root" >&2
-  echo "wine_executable=$wine_executable" >&2
-  echo "prefix_init_executable=$prefix_init_executable" >&2
-  echo "target_executable=$target_executable" >&2
+  echo "probe_path=$probe_path" >&2
   echo "WINEPREFIX=$WINEPREFIX" >&2
   echo "WINEDLLPATH=$WINEDLLPATH" >&2
+  echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >&2
+  echo "DYLD_FALLBACK_LIBRARY_PATH=${DYLD_FALLBACK_LIBRARY_PATH:-}" >&2
   for diagnostic_path in \
-    "$runtime_root/lib/wine/i386-windows/kernel32.dll" \
-    "$runtime_root/lib/wine/i386-windows/ntdll.dll" \
-    "$runtime_root/lib/wine/i386-windows/cmd.exe" \
-    "$runtime_root/lib/wine/x86_64-windows/kernel32.dll" \
-    "$runtime_root/lib/wine/x86_64-windows/ntdll.dll" \
+    "$probe_path" \
+    "$runtime_root/bin/wine64" \
+    "$runtime_root/bin/wine" \
     "$runtime_root/lib/wine/x86_64-windows/cmd.exe" \
-    "$runtime_root/lib/wine/x86_64-windows/wow64.dll" \
-    "$runtime_root/lib/wine/x86_64-windows/wow64cpu.dll" \
-    "$runtime_root/lib/wine/x86_64-windows/wow64win.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/kernel32.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/user32.dll" \
     "$runtime_root/lib/wine/x86_64-unix/ntdll.so" \
-    "$runtime_root/lib/wine/aarch64-unix/ntdll.so"
+    "$runtime_root/lib/libgnutls.30.dylib" \
+    "$runtime_root/lib/libfreetype.6.dylib" \
+    "$sentinel_path"
   do
     if [[ -e "$diagnostic_path" ]]; then
       /usr/bin/file "$diagnostic_path" >&2
@@ -101,7 +107,12 @@ print_runtime_diagnostics() {
       echo "missing: $diagnostic_path" >&2
     fi
   done
-  echo "----- end runtime diagnostics -----" >&2
+  find "$work_root" -maxdepth 1 -type f -name "*.log" -print |
+    sort |
+    while IFS= read -r log_path; do
+      print_log_excerpt "${log_path:t}" "$log_path"
+    done
+  echo "----- end GUI launch smoke diagnostics -----" >&2
 }
 
 run_wine_with_timeout() {
@@ -122,7 +133,7 @@ run_wine_with_timeout() {
   deadline=$((SECONDS + timeout_seconds))
   while [[ ! -f "$command_exit_status_path" ]]; do
     if (( SECONDS >= deadline )); then
-      echo "Wine32-on-64 $label timed out after ${timeout_seconds}s." >&2
+      echo "GUI launch smoke $label timed out after ${timeout_seconds}s." >&2
       print_log_excerpt "stdout" "$command_stdout_path"
       print_log_excerpt "stderr" "$command_stderr_path"
       print_runtime_diagnostics
@@ -136,9 +147,28 @@ run_wine_with_timeout() {
   exit_code="$(cat "$command_exit_status_path")"
 
   if (( exit_code != 0 )); then
-    echo "Wine32-on-64 $label exited with code $exit_code." >&2
+    echo "GUI launch smoke $label exited with code $exit_code." >&2
     print_log_excerpt "stdout" "$command_stdout_path"
     print_log_excerpt "stderr" "$command_stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+}
+
+wait_for_sentinel() {
+  local deadline
+  deadline=$((SECONDS + timeout_seconds))
+  while [[ ! -f "$sentinel_path" ]]; do
+    if (( SECONDS >= deadline )); then
+      echo "GUI launch smoke did not create sentinel after ${timeout_seconds}s." >&2
+      print_runtime_diagnostics
+      exit 75
+    fi
+    sleep 1
+  done
+
+  if ! grep -F "$sentinel" "$sentinel_path" >/dev/null; then
+    echo "GUI launch smoke sentinel did not contain expected marker." >&2
     print_runtime_diagnostics
     exit 65
   fi
@@ -164,16 +194,6 @@ stop_smoke_processes() {
         kill -TERM "$wine_pid" 2>/dev/null || true
       fi
     done
-
-  sleep 1
-
-  /bin/ps -axo pid=,command= |
-    /usr/bin/awk -v root="$work_root" 'index($0, root) > 0 { print $1 }' |
-    while IFS= read -r wine_pid; do
-      if [[ -n "$wine_pid" && "$wine_pid" != "$$" ]]; then
-        kill -KILL "$wine_pid" 2>/dev/null || true
-      fi
-    done
 }
 
 cleanup() {
@@ -183,13 +203,20 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+wine_dll_paths=(
+  "$runtime_root/lib/wine/x86_64-windows"
+  "$runtime_root/lib/wine/i386-windows"
+  "$runtime_root/lib/wine"
+)
+
 export WINEPREFIX="$prefix"
-export WINEARCH=win64
-export WINEDEBUG="${WINEDEBUG:--all}"
-export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
-export GST_DEBUG="${GST_DEBUG:-1}"
-export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-0}"
-export WINEDLLPATH="$runtime_root/lib/wine/x86_64-windows:$runtime_root/lib/wine/i386-windows:$runtime_root/lib/wine${WINEDLLPATH:+:$WINEDLLPATH}"
+export WINEDEBUG="fixme-all"
+export GST_DEBUG="1"
+export GST_PLUGIN_SYSTEM_PATH="$runtime_root/lib/gstreamer-1.0"
+export GST_PLUGIN_SCANNER="$runtime_root/libexec/gstreamer-1.0/gst-plugin-scanner"
+export GST_REGISTRY="$work_root/gstreamer-registry.bin"
+export WINEDATADIR="$runtime_root/share/wine"
+export WINEDLLPATH="${(j/:/)wine_dll_paths}"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 unset DYLD_FALLBACK_LIBRARY_PATH
 
@@ -198,22 +225,18 @@ run_wine_with_timeout \
   "$prefix_init_stdout_path" \
   "$prefix_init_stderr_path" \
   "$prefix_init_exit_status_path" \
-  "$wine_executable" "$prefix_init_executable" /c ver
+  "$wine_executable" wineboot --init
 
 "$wineserver_executable" -w >/dev/null 2>&1 || true
 
 run_wine_with_timeout \
-  "32-bit cmd launch smoke" \
+  "start /unix GUI launch" \
   "$stdout_path" \
   "$stderr_path" \
   "$exit_status_path" \
-  "$wine_executable" "$target_executable" /c echo "$sentinel"
+  "$wine_executable" start /unix "$probe_path"
 
-if ! grep -F "$sentinel" "$stdout_path" >/dev/null; then
-  echo "Wine32-on-64 launch smoke did not print the expected sentinel." >&2
-  print_log_excerpt "stdout" "$stdout_path"
-  print_log_excerpt "stderr" "$stderr_path"
-  exit 65
-fi
+wait_for_sentinel
+"$wineserver_executable" -w >/dev/null 2>&1 || true
 
-echo "Wine32-on-64 launch smoke OK: $runtime_root"
+echo "GUI launch smoke OK: $runtime_root"

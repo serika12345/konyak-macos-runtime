@@ -551,6 +551,45 @@ jobs:
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
 
+  smoke-gui-launch:
+    name: Verify GUI start /unix smoke
+    needs: assemble-runtime-stack-artifact
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime stack artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime-stack
+          path: dist
+
+      - name: Verify GUI start /unix smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-gui-launch-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-gui-launch.zsh $smoke_runtime_root"
+
   smoke-dxmt-d3d11:
     name: Verify DXMT D3D11 backend smoke
     needs: assemble-runtime-stack-artifact
@@ -634,6 +673,7 @@ jobs:
       - assemble-runtime-stack-artifact
       - generate-release-metadata
       - smoke-wine32on64
+      - smoke-gui-launch
       - smoke-dxvk-d3d11
       - smoke-dxmt-d3d11
       - smoke-vkd3d-d3d12

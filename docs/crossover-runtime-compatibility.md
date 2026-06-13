@@ -256,13 +256,37 @@ single-archive source manifest.
 After the runtime layout is fixed, verify normal `.exe` launch behavior using a
 real GUI executable path, not only backend probes or prefix initialization.
 
-Then:
+Phase 3 is implemented for the current CrossOver-derived runtime:
 
-- compare `start /unix` with CrossOver wrapper behavior;
-- remove smoke-only dylib search paths that the app does not use;
-- settle `WINEMSYNC` and `WINEESYNC` defaults explicitly;
-- keep backend smoke jobs independently rerunnable without forcing a successful
-  Wine build to run again.
+- The parent Konyak CLI still launches macOS programs through
+  `wine64 start /unix <program>`.
+- A Win32 GUI probe now exercises that same launch shape from the assembled
+  stack. It creates a visible window, writes a sentinel file inside the prefix,
+  and fails with diagnostics if prefix initialization, `start /unix`, or
+  sentinel creation does not complete before the timeout.
+- Runtime smoke scripts no longer set `DYLD_FALLBACK_LIBRARY_PATH`. They use
+  the app-equivalent `DYLD_LIBRARY_PATH` rooted at the assembled runtime's
+  `lib` directory.
+- `msync` and `esync` are mutually exclusive in the parent launch environment:
+  `msync` sets `WINEMSYNC=1`, and `esync` sets `WINEESYNC=1`.
+- The runtime workflow runs GUI launch smoke as a downstream job that downloads
+  the assembled stack artifact. It does not depend on the CrossOver Wine
+  derivation in a way that can rebuild Wine during a smoke rerun.
+
+The single assembled stack also preserves the mixed libiconv ABI requirements
+introduced by the combined Wine and component closure:
+
+- GNU libiconv remains at `<runtime>/lib/libiconv.2.dylib` for GnuTLS and
+  libraries such as `libidn2` that require `_libiconv`.
+- Darwin ABI libiconv is kept as
+  `<runtime>/lib/libiconv-darwin.2.dylib`.
+- Immediate root `bin/*` and `lib/*` Mach-O files that declare the Darwin
+  compatibility-version-7 `libiconv.2.dylib` dependency are retargeted to the
+  Darwin alias after component extraction.
+
+Local Actions-equivalent verification completed for the assembled stack layout,
+direct `libgnutls.30.dylib` loading, `wine64 start /unix` GUI launch,
+Wine32-on-64 launch, and the DXVK, DXMT, and vkd3d backend smoke probes.
 
 ## Non-goals
 

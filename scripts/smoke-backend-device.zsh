@@ -322,7 +322,7 @@ export DXVK_LOG_LEVEL="${DXVK_LOG_LEVEL:-debug}"
 export DXVK_LOG_PATH="$work_root"
 export WINEDLLPATH="${(j/:/)wine_dll_paths}"
 export DYLD_LIBRARY_PATH="${(j/:/)dyld_path_entries}${dyld_path_entries:+:}$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-export DYLD_FALLBACK_LIBRARY_PATH="$runtime_root/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+unset DYLD_FALLBACK_LIBRARY_PATH
 
 run_wine_with_timeout \
   "prefix initialization" \

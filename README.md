@@ -51,7 +51,9 @@ Runtime archives must include:
 - Wine32-on-64 payload for 32-bit Windows executables
 - a Konyak-compatible runtime stack source manifest
 
-The release manifest is assembled from separately published component archives:
+The public release manifest points each component record at one assembled
+runtime stack archive. The component archives remain internal CI build and
+verification units:
 
 - CrossOver-derived Wine runtime
 - DXVK-macOS
@@ -77,6 +79,11 @@ These probes build small x86_64 Windows executables with mingw, initialize a
 temporary Wine prefix, apply the same native override DLL placement expected by
 Konyak, and verify DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device creation.
 They check runtime behavior rather than binary identity with CrossOver.
+
+Release builds also run a GUI launch smoke against the assembled runtime stack
+through `wine64 start /unix <program>`, matching Konyak's normal macOS `.exe`
+launch path. The launch smoke uses the runtime `lib` directory through
+`DYLD_LIBRARY_PATH` and does not rely on `DYLD_FALLBACK_LIBRARY_PATH`.
 
 DXVK-macOS is packaged independently from GPTK/D3DMetal. The pinned Gcenx
 DXVK-macOS archive provides `dxgi.dll`, `d3d9.dll`, `d3d10core.dll`, and

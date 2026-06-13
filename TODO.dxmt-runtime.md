@@ -84,7 +84,7 @@ runtime/
       DXMT DLL set.
 - [ ] Add Wine-side DXMT prerequisites if the package requires hidden
       `winemac.drv` API exports.
-- [ ] Publish the default macOS runtime as one assembled stack archive while
+- [x] Publish the default macOS runtime as one assembled stack archive while
       retaining separate component artifacts inside CI.
 - [x] Keep DXVK packaging independent and usable without GPTK.
       The current `dxvk-macos` component combines the pinned Gcenx DXVK-macOS
@@ -127,11 +127,14 @@ Wine runtime or unrelated components.
 - [x] Keep release payload checks for Wine32-on-64, DXVK, DXMT, vkd3d, and
       GStreamer.
 - [x] Keep assembled runtime launch smoke for 32-bit `cmd.exe`.
+- [x] Keep assembled runtime GUI launch smoke for the normal
+      `wine64 start /unix <program>` path.
 - [x] Add headless Windows probe executables built with mingw inside the
       runtime submodule.
       - [x] D3D11 device smoke for DXVK.
       - [x] D3D11 device smoke for DXMT.
       - [x] D3D12 device smoke for vkd3d.
+      - [x] Win32 GUI launch smoke sentinel probe.
 - [x] Add backend smoke runner scripts that create a temporary `WINEPREFIX`,
       apply backend-specific `WINEDLLPATH` and `WINEDLLOVERRIDES`, enforce a
       timeout, and print diagnostics on failure.

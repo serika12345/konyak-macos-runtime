@@ -30,4 +30,15 @@ mkdir -p "$output_dir"
   "$repo_root/probes/windows/d3d12_device_probe.c" \
   -o "$output_dir/d3d12_device_probe.exe"
 
+"$compiler" \
+  -std=c11 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -O2 \
+  -mwindows \
+  -municode \
+  "$repo_root/probes/windows/gui_launch_probe.c" \
+  -o "$output_dir/gui_launch_probe.exe"
+
 printf '%s\n' "$output_dir"

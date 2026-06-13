@@ -10,6 +10,8 @@
   gettext,
   gst_all_1,
   gnutls,
+  libiconv,
+  libiconvReal,
   libinotify-kqueue,
   libkrb5,
   libpcap,
@@ -78,6 +80,7 @@ stdenv.mkDerivation {
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     gnutls
+    libiconv
     libinotify-kqueue
     libkrb5
     libpcap
@@ -245,6 +248,150 @@ static void *konyak_dlopen_runtime_freetype(void)
 }
 #endif'
 
+    # GnuTLS and Kerberos are also resolved through dlopen in Unix-side Wine
+    # modules. On macOS those dlopen calls do not reliably honor the app's
+    # DYLD_LIBRARY_PATH after Wine re-execs, so resolve them from WINEDLLPATH
+    # or from the Unix module location just like the FreeType runtime component.
+    substituteInPlace \
+      dlls/crypt32/unixlib.c \
+      dlls/bcrypt/gnutls.c \
+      dlls/secur32/schannel_gnutls.c \
+      dlls/kerberos/unixlib.c \
+      --replace-fail '#include <dlfcn.h>' '#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>'
+    substituteInPlace \
+      dlls/crypt32/unixlib.c \
+      dlls/bcrypt/gnutls.c \
+      dlls/secur32/schannel_gnutls.c \
+      --replace-fail 'static void *libgnutls_handle;' 'static void *libgnutls_handle;
+
+static void *konyak_dlopen_runtime_dylib(const char *soname)
+{
+#ifdef __APPLE__
+    const char *cursor = getenv("WINEDLLPATH");
+    char entry[4096];
+    char dylib_path[4096];
+    char image_path[4096];
+    Dl_info info;
+    void *handle;
+
+    while (cursor && *cursor)
+    {
+        const char *end = strchr(cursor, 58);
+        size_t entry_length = end ? (size_t)(end - cursor) : strlen(cursor);
+
+        if (entry_length > 0 && entry_length < sizeof(entry))
+        {
+            char *marker;
+
+            memcpy(entry, cursor, entry_length);
+            entry[entry_length] = 0;
+            if ((marker = strstr(entry, "/lib/wine")))
+            {
+                int lib_length = (int)(marker - entry + 4);
+                int length = snprintf(dylib_path, sizeof(dylib_path), "%.*s/%s",
+                                      lib_length, entry, soname);
+                if (length > 0 && length < sizeof(dylib_path) &&
+                    (handle = dlopen(dylib_path, RTLD_NOW)))
+                    return handle;
+            }
+        }
+
+        if (!end) break;
+        cursor = end + 1;
+    }
+
+    if (dladdr((const void *)konyak_dlopen_runtime_dylib, &info) && info.dli_fname)
+    {
+        int length = snprintf(image_path, sizeof(image_path), "%s", info.dli_fname);
+        char *slash;
+
+        if (length > 0 && length < sizeof(image_path) && (slash = strrchr(image_path, 47)))
+        {
+            *slash = 0;
+            length = snprintf(dylib_path, sizeof(dylib_path), "%s/../../%s",
+                              image_path, soname);
+            if (length > 0 && length < sizeof(dylib_path) &&
+                (handle = dlopen(dylib_path, RTLD_NOW)))
+                return handle;
+        }
+    }
+#endif
+
+    return dlopen(soname, RTLD_NOW);
+}'
+    substituteInPlace \
+      dlls/crypt32/unixlib.c \
+      dlls/bcrypt/gnutls.c \
+      dlls/secur32/schannel_gnutls.c \
+      --replace-fail 'libgnutls_handle = dlopen(libgnutls_name_candidates[i], RTLD_NOW);' \
+        'libgnutls_handle = konyak_dlopen_runtime_dylib(libgnutls_name_candidates[i]);'
+    substituteInPlace dlls/kerberos/unixlib.c \
+      --replace-fail 'static void *libkrb5_handle;' 'static void *libkrb5_handle;
+
+static void *konyak_dlopen_runtime_dylib(const char *soname)
+{
+#ifdef __APPLE__
+    const char *cursor = getenv("WINEDLLPATH");
+    char entry[4096];
+    char dylib_path[4096];
+    char image_path[4096];
+    Dl_info info;
+    void *handle;
+
+    while (cursor && *cursor)
+    {
+        const char *end = strchr(cursor, 58);
+        size_t entry_length = end ? (size_t)(end - cursor) : strlen(cursor);
+
+        if (entry_length > 0 && entry_length < sizeof(entry))
+        {
+            char *marker;
+
+            memcpy(entry, cursor, entry_length);
+            entry[entry_length] = 0;
+            if ((marker = strstr(entry, "/lib/wine")))
+            {
+                int lib_length = (int)(marker - entry + 4);
+                int length = snprintf(dylib_path, sizeof(dylib_path), "%.*s/%s",
+                                      lib_length, entry, soname);
+                if (length > 0 && length < sizeof(dylib_path) &&
+                    (handle = dlopen(dylib_path, RTLD_NOW)))
+                    return handle;
+            }
+        }
+
+        if (!end) break;
+        cursor = end + 1;
+    }
+
+    if (dladdr((const void *)konyak_dlopen_runtime_dylib, &info) && info.dli_fname)
+    {
+        int length = snprintf(image_path, sizeof(image_path), "%s", info.dli_fname);
+        char *slash;
+
+        if (length > 0 && length < sizeof(image_path) && (slash = strrchr(image_path, 47)))
+        {
+            *slash = 0;
+            length = snprintf(dylib_path, sizeof(dylib_path), "%s/../../%s",
+                              image_path, soname);
+            if (length > 0 && length < sizeof(dylib_path) &&
+                (handle = dlopen(dylib_path, RTLD_NOW)))
+                return handle;
+        }
+    }
+#endif
+
+    return dlopen(soname, RTLD_NOW);
+}'
+    substituteInPlace dlls/kerberos/unixlib.c \
+      --replace-fail 'dlopen( SONAME_LIBKRB5, RTLD_NOW )' \
+        'konyak_dlopen_runtime_dylib( SONAME_LIBKRB5 )' \
+      --replace-fail 'dlopen( SONAME_LIBGSSAPI_KRB5, RTLD_NOW )' \
+        'konyak_dlopen_runtime_dylib( SONAME_LIBGSSAPI_KRB5 )'
+
     mkdir -p "$TMPDIR/konyak-llvm-bin"
     ln -sf ${llvmPackages.clang-unwrapped}/bin/clang "$TMPDIR/konyak-llvm-bin/clang"
     ln -sf ${llvmPackages.lld}/bin/lld-link "$TMPDIR/konyak-llvm-bin/lld-link"
@@ -317,6 +464,14 @@ EOF
       exit 1
     fi
 
+    if [ ! -e "$out/bin/wine" ]; then
+      echo "Missing Wine launcher: $out/bin/wine" >&2
+      exit 1
+    fi
+    if [ ! -e "$out/bin/wine64" ]; then
+      ln -s wine "$out/bin/wine64"
+    fi
+
     copy_runtime_dylib_closure() {
       local source_path="$1"
       local dependency
@@ -338,6 +493,44 @@ EOF
       cp -Lf "$source_path" "$target_path"
       chmod u+w "$target_path"
       install_name_tool -id "@rpath/$dependency_file_name" "$target_path"
+
+      otool -L "$source_path" |
+        awk 'NR > 1 { print $1 }' |
+        while IFS= read -r dependency; do
+          case "$dependency" in
+            /nix/store/*.dylib) ;;
+            *) continue ;;
+          esac
+
+          if [ "$dependency" = "$source_path" ]; then
+            continue
+          fi
+
+          copy_runtime_dylib_closure "$dependency"
+          dependency_file_name="$(basename "$dependency")"
+          install_name_tool \
+            -change "$dependency" "@loader_path/$dependency_file_name" \
+            "$target_path"
+        done
+    }
+
+    copy_runtime_dylib_as() {
+      local source_path="$1"
+      local target_file_name="$2"
+      local dependency
+      local dependency_file_name
+      local target_path
+
+      target_path="$out/lib/$target_file_name"
+
+      if [ ! -f "$source_path" ]; then
+        echo "Runtime dylib dependency not found: $source_path" >&2
+        exit 1
+      fi
+
+      cp -Lf "$source_path" "$target_path"
+      chmod u+w "$target_path"
+      install_name_tool -id "@rpath/$target_file_name" "$target_path"
 
       otool -L "$source_path" |
         awk 'NR > 1 { print $1 }' |
@@ -382,6 +575,11 @@ EOF
     # Wine probes these libraries at runtime with dlopen rather than linking
     # every Unix module to them directly, so direct Mach-O dependency scanning
     # alone is not enough to keep them in the portable runtime root.
+    rm -f "$out/lib/libiconv.2.dylib" "$out/lib/libiconv.dylib"
+    copy_runtime_dylib_glob "${lib.getLib libiconvReal}/lib/libiconv*.dylib"
+    copy_runtime_dylib_as "${lib.getLib libiconv}/lib/libiconv.2.dylib" \
+      "libiconv-darwin.2.dylib"
+    copy_runtime_dylib_glob "${lib.getLib libiconv}/lib/libcharset*.dylib"
     copy_runtime_dylib_glob "${lib.getLib gnutls}/lib/libgnutls*.dylib"
     copy_runtime_dylib_glob "${lib.getLib libkrb5}/lib/libgssapi_krb5*.dylib"
     copy_runtime_dylib_glob "${lib.getLib libkrb5}/lib/libkrb5*.dylib"
@@ -520,11 +718,100 @@ EOF
         done
     }
 
+    darwin_iconv_dependency_refs() {
+      local target_path="$1"
+      local line
+      local dependency
+
+      otool -L "$target_path" |
+        while IFS= read -r line; do
+          case "$line" in
+            *"compatibility version 7.0.0, current version 7.0.0)"*) ;;
+            *) continue ;;
+          esac
+
+          dependency="$(
+            printf '%s\n' "$line" |
+              sed 's/^[[:space:]]*//; s/[[:space:]]*(compatibility version.*$//'
+          )"
+          case "$dependency" in
+            */libiconv.2.dylib|libiconv.2.dylib)
+              printf '%s\n' "$dependency"
+              ;;
+          esac
+        done
+    }
+
+    patch_darwin_iconv_dependents() {
+      local candidate_path
+      local dependencies
+      local dependency
+      local replacement_reference
+      local file_output
+
+      find "$out/bin" "$out/lib" -type f -print |
+        while IFS= read -r candidate_path; do
+          file_output="$(/usr/bin/file "$candidate_path")"
+          case "$file_output" in
+            *Mach-O*) ;;
+            *) continue ;;
+          esac
+
+          dependencies="$(darwin_iconv_dependency_refs "$candidate_path")"
+          if [ -z "$dependencies" ]; then
+            continue
+          fi
+
+          chmod u+w "$candidate_path"
+          printf '%s\n' "$dependencies" |
+            while IFS= read -r dependency; do
+              replacement_reference="''${dependency%libiconv.2.dylib}libiconv-darwin.2.dylib"
+              install_name_tool \
+                -change "$dependency" "$replacement_reference" \
+                "$candidate_path"
+            done
+        done
+    }
+
+    assert_darwin_iconv_dependents_patched() {
+      local candidate_path
+      local file_output
+      local remaining
+      local remaining_dependency
+
+      remaining="$(
+        find "$out/bin" "$out/lib" -type f -print |
+          while IFS= read -r candidate_path; do
+            file_output="$(/usr/bin/file "$candidate_path")"
+            case "$file_output" in
+              *Mach-O*) ;;
+            *) continue ;;
+          esac
+
+            darwin_iconv_dependency_refs "$candidate_path" |
+              while IFS= read -r remaining_dependency; do
+                printf '%s: %s\n' "''${candidate_path#$out/}" "$remaining_dependency"
+              done
+          done
+      )"
+      if [ -n "$remaining" ]; then
+        echo "Darwin libiconv ABI consumers still target libiconv.2.dylib:" >&2
+        echo "$remaining" >&2
+        exit 1
+      fi
+    }
+
     normalize_runtime_machos
     # The first pass may copy new dylib closure files into $out/lib while
     # rewriting Wine modules. Re-run normalization so those newly copied dylibs
     # also lose Nix store LC_RPATH values before the final closure check.
     normalize_runtime_machos
+    # Darwin packages in nixpkgs use the system libiconv ABI, while GnuTLS and
+    # libidn2 require GNU libiconv. Keep GNU libiconv at the standard soname for
+    # the GnuTLS closure and retarget only compatibility-7 Darwin consumers to
+    # the separately bundled Darwin libiconv alias.
+    patch_darwin_iconv_dependents
+    assert_darwin_iconv_dependents_patched
 
     remaining_nix_references="$(find_macho_nix_references)"
     if [ -n "$remaining_nix_references" ]; then
