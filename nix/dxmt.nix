@@ -148,6 +148,32 @@ EOF
     find "$TMPDIR/dxmt-install-win32" -type f -name '*.dll' -print -exec cp -f {} "$out/i386-windows/" \;
     find "$TMPDIR/dxmt-install-win64" -type f -name 'winemetal.so' -print -exec cp -f {} "$out/x86_64-unix/" \;
 
+    dxmt_macho_rpaths() {
+      local target_path="$1"
+
+      otool -l "$target_path" |
+        awk '/LC_RPATH/ { getline; getline; print $2 }'
+    }
+
+    normalize_dxmt_macho_rpaths() {
+      local target_path="$1"
+      local existing_rpath
+
+      chmod u+w "$target_path"
+
+      while IFS= read -r existing_rpath; do
+        case "$existing_rpath" in
+          /nix/store/*)
+            install_name_tool -delete_rpath "$existing_rpath" "$target_path" 2>/dev/null || true
+            ;;
+        esac
+      done < <(dxmt_macho_rpaths "$target_path")
+
+      if ! dxmt_macho_rpaths "$target_path" | grep -Fx "@loader_path" >/dev/null; then
+        install_name_tool -add_rpath "@loader_path" "$target_path"
+      fi
+    }
+
     copy_dxmt_dylib_closure() {
       local source_path="$1"
       local dependency
@@ -163,6 +189,7 @@ EOF
       fi
 
       if [ -f "$target_path" ]; then
+        normalize_dxmt_macho_rpaths "$target_path"
         return 0
       fi
 
@@ -188,6 +215,8 @@ EOF
             -change "$dependency" "@loader_path/$dependency_file_name" \
             "$target_path"
         done
+
+      normalize_dxmt_macho_rpaths "$target_path"
     }
 
     rewrite_dxmt_nix_dylib_references() {
@@ -210,6 +239,8 @@ EOF
             -change "$dependency" "@loader_path/$dependency_file_name" \
             "$target_path"
         done
+
+      normalize_dxmt_macho_rpaths "$target_path"
     }
 
     find_dxmt_macho_nix_dylib_references() {
@@ -227,6 +258,10 @@ EOF
           otool -L "$candidate_path" |
             awk -v relative_path="''${candidate_path#$out/}" \
               'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+
+          otool -l "$candidate_path" |
+            awk -v relative_path="''${candidate_path#$out/}" \
+              '/LC_RPATH/ { getline; getline; if ($2 ~ /^\/nix\/store\//) print relative_path ": " $2 }'
         done
     }
 

@@ -3,17 +3,27 @@
   stdenv,
   fetchurl,
   bison,
+  cups,
+  ffmpeg-headless,
   flex,
   freetype,
   gettext,
   gst_all_1,
   gnutls,
+  libinotify-kqueue,
+  libkrb5,
   libpcap,
+  libunwind,
+  libusb1,
   libjpeg,
   libpng,
   libtiff,
   moltenvk,
+  ocl-icd,
+  opencl-headers,
+  openssl,
   perl,
+  pkgsCross,
   pkg-config,
   python3,
   SDL2,
@@ -52,6 +62,8 @@ stdenv.mkDerivation {
     llvmPackages.lld
     llvmPackages.llvm
     perl
+    pkgsCross.mingw32.buildPackages.gcc
+    pkgsCross.mingwW64.buildPackages.gcc
     pkg-config
     python3
     xz
@@ -59,16 +71,25 @@ stdenv.mkDerivation {
   ];
 
   buildInputs = [
+    cups
+    ffmpeg-headless
     gettext
     freetype
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     gnutls
+    libinotify-kqueue
+    libkrb5
     libpcap
+    libunwind
+    libusb1
     libjpeg
     libpng
     libtiff
     moltenvk
+    ocl-icd
+    opencl-headers
+    openssl
     SDL2
     zlib
   ];
@@ -77,25 +98,24 @@ stdenv.mkDerivation {
     "--prefix=${placeholder "out"}"
     "--enable-archs=i386,x86_64"
     "--disable-tests"
-    "--disable-win16"
-    "--without-alsa"
-    "--without-capi"
-    "--without-dbus"
-    "--without-gphoto"
-    "--without-inotify"
-    "--without-krb5"
-    "--without-oss"
-    "--without-pulse"
-    "--without-sane"
-    "--without-udev"
-    "--without-unwind"
-    "--without-usb"
     "--without-x"
+    "--with-coreaudio"
+    "--with-cups"
+    "--with-ffmpeg"
     "--with-freetype"
+    "--with-gettext"
     "--with-gnutls"
+    "--with-gssapi"
     "--with-gstreamer"
+    "--with-inotify"
+    "--with-krb5"
+    "--with-mingw"
+    "--with-opencl"
     "--with-pcap"
+    "--with-pthread"
     "--with-sdl"
+    "--with-unwind"
+    "--with-usb"
     "--with-vulkan"
   ];
 
@@ -243,10 +263,10 @@ EOF
     export CROSSCFLAGS="-g -O2"
     export CROSSLDFLAGS=""
 
-    export CPPFLAGS="$CPPFLAGS -I${libpcap}/include"
-    export LDFLAGS="$LDFLAGS -L${libpcap}/lib"
-    export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I${libpcap}/include -Wno-error=implicit-function-declaration"
-    export NIX_LDFLAGS="$NIX_LDFLAGS -L${libpcap}/lib -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
+    export CPPFLAGS="$CPPFLAGS -I${libpcap}/include -I${libinotify-kqueue}/include"
+    export LDFLAGS="$LDFLAGS -L${libpcap}/lib -L${libinotify-kqueue}/lib"
+    export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I${libpcap}/include -I${libinotify-kqueue}/include -Wno-error=implicit-function-declaration"
+    export NIX_LDFLAGS="$NIX_LDFLAGS -L${libpcap}/lib -L${libinotify-kqueue}/lib -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
   '';
 
   configurePhase = ''
@@ -339,6 +359,35 @@ EOF
         done
     }
 
+    copy_runtime_dylib_glob() {
+      local pattern="$1"
+      local copied="false"
+      local source_path
+
+      for source_path in $pattern; do
+        if [ ! -f "$source_path" ]; then
+          continue
+        fi
+
+        copy_runtime_dylib_closure "$source_path"
+        copied="true"
+      done
+
+      if [ "$copied" != "true" ]; then
+        echo "Runtime dylib dependency not found: $pattern" >&2
+        exit 1
+      fi
+    }
+
+    # Wine probes these libraries at runtime with dlopen rather than linking
+    # every Unix module to them directly, so direct Mach-O dependency scanning
+    # alone is not enough to keep them in the portable runtime root.
+    copy_runtime_dylib_glob "${lib.getLib gnutls}/lib/libgnutls*.dylib"
+    copy_runtime_dylib_glob "${lib.getLib libkrb5}/lib/libgssapi_krb5*.dylib"
+    copy_runtime_dylib_glob "${lib.getLib libkrb5}/lib/libkrb5*.dylib"
+    copy_runtime_dylib_glob "${lib.getLib ocl-icd}/lib/libOpenCL*.dylib"
+    copy_runtime_dylib_glob "${lib.getLib libusb1}/lib/libusb-1.0*.dylib"
+
     runtime_dylib_reference() {
       local target_path="$1"
       local dependency_file_name="$2"
@@ -357,6 +406,55 @@ EOF
           printf '@rpath/%s\n' "$dependency_file_name"
           ;;
       esac
+    }
+
+    runtime_rpath_reference() {
+      local target_path="$1"
+
+      case "$target_path" in
+        "$out/bin/"*)
+          printf '@loader_path/../lib\n'
+          ;;
+        "$out/lib/wine/"*)
+          printf '@loader_path/../../\n'
+          ;;
+        "$out/lib/"*)
+          printf '@loader_path\n'
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    }
+
+    macho_rpaths() {
+      local target_path="$1"
+
+      otool -l "$target_path" |
+        awk '/LC_RPATH/ { getline; getline; print $2 }'
+    }
+
+    normalize_macho_rpaths() {
+      local target_path="$1"
+      local rpath
+      local local_rpath
+
+      chmod u+w "$target_path"
+      macho_rpaths "$target_path" |
+        sort -u |
+        while IFS= read -r rpath; do
+          case "$rpath" in
+            /nix/store/*)
+              install_name_tool -delete_rpath "$rpath" "$target_path"
+              ;;
+          esac
+        done
+
+      if local_rpath="$(runtime_rpath_reference "$target_path")"; then
+        if ! macho_rpaths "$target_path" | grep -Fx "$local_rpath" >/dev/null; then
+          install_name_tool -add_rpath "$local_rpath" "$target_path"
+        fi
+      fi
     }
 
     rewrite_nix_dylib_references() {
@@ -380,10 +478,10 @@ EOF
           install_name_tool \
             -change "$dependency" "$replacement_reference" \
             "$target_path"
-        done
+      done
     }
 
-    find_macho_nix_dylib_references() {
+    find_macho_nix_references() {
       local candidate_path
       local file_output
 
@@ -398,24 +496,40 @@ EOF
           otool -L "$candidate_path" |
             awk -v relative_path="''${candidate_path#$out/}" \
               'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+
+          otool -l "$candidate_path" |
+            awk -v relative_path="''${candidate_path#$out/}" \
+              '/LC_RPATH/ { getline; getline; if ($2 ~ /^\/nix\/store\//) print relative_path ": " $2 }'
         done
     }
 
-    find "$out/bin" "$out/lib" -type f -print |
-      while IFS= read -r candidate_path; do
-        file_output="$(/usr/bin/file "$candidate_path")"
-        case "$file_output" in
-          *Mach-O*) ;;
-          *) continue ;;
-        esac
+    normalize_runtime_machos() {
+      local candidate_path
+      local file_output
 
-        rewrite_nix_dylib_references "$candidate_path"
-      done
+      find "$out/bin" "$out/lib" -type f -print |
+        while IFS= read -r candidate_path; do
+          file_output="$(/usr/bin/file "$candidate_path")"
+          case "$file_output" in
+            *Mach-O*) ;;
+            *) continue ;;
+          esac
 
-    remaining_nix_dylib_references="$(find_macho_nix_dylib_references)"
-    if [ -n "$remaining_nix_dylib_references" ]; then
-      echo "Wine runtime Mach-O files still reference unpackaged Nix store dylibs:" >&2
-      echo "$remaining_nix_dylib_references" >&2
+          normalize_macho_rpaths "$candidate_path"
+          rewrite_nix_dylib_references "$candidate_path"
+        done
+    }
+
+    normalize_runtime_machos
+    # The first pass may copy new dylib closure files into $out/lib while
+    # rewriting Wine modules. Re-run normalization so those newly copied dylibs
+    # also lose Nix store LC_RPATH values before the final closure check.
+    normalize_runtime_machos
+
+    remaining_nix_references="$(find_macho_nix_references)"
+    if [ -n "$remaining_nix_references" ]; then
+      echo "Wine runtime Mach-O files still reference unpackaged Nix store paths:" >&2
+      echo "$remaining_nix_references" >&2
       exit 1
     fi
 

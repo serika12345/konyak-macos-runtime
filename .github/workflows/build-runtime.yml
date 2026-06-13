@@ -331,6 +331,70 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  assemble-runtime-stack-artifact:
+    name: Assemble runtime stack artifact
+    needs:
+      - build-wine-runtime
+      - build-dxmt-component
+      - build-vkd3d-component
+      - package-binary-components
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Download Wine runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime
+          path: dist
+
+      - name: Download DXMT artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-dxmt
+          path: dist
+
+      - name: Download vkd3d artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-vkd3d
+          path: dist
+
+      - name: Download binary component artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-binary-components
+          path: dist
+
+      - name: Assemble and verify runtime stack
+        run: |
+          runtime_stack_root="$RUNNER_TEMP/konyak-runtime-stack"
+          ./scripts/assemble-runtime-stack.zsh \
+            dist \
+            "$runtime_stack_root" \
+            dist/konyak-macos-wine-runtime-stack.tar.zst
+          ./scripts/check-wine32on64-runtime.zsh "$runtime_stack_root"
+          ./scripts/check-dxmt-component.zsh "$runtime_stack_root"
+          ./scripts/check-vkd3d-component.zsh "$runtime_stack_root"
+          ./scripts/check-dxvk-component.zsh "$runtime_stack_root"
+          ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
+
+      - name: Upload runtime stack artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime-stack
+          path: dist/konyak-macos-wine-runtime-stack.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
   generate-release-metadata:
     name: Generate release metadata
     needs:
@@ -338,6 +402,7 @@ jobs:
       - build-dxmt-component
       - build-vkd3d-component
       - package-binary-components
+      - assemble-runtime-stack-artifact
     runs-on: macos-15-intel
     timeout-minutes: 30
     env:
@@ -373,13 +438,20 @@ jobs:
           name: konyak-macos-binary-components
           path: dist
 
+      - name: Download runtime stack artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime-stack
+          path: dist
+
       - name: Generate release metadata
         run: |
+          KONYAK_SINGLE_STACK_ARCHIVE=1 \
           KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${KONYAK_RUNTIME_RELEASE_TAG}" \
             nix shell nixpkgs#jq -c \
             ./scripts/make-source-manifest.zsh \
               dist \
-              dist/konyak-macos-wine-runtime.tar.zst \
+              dist/konyak-macos-wine-runtime-stack.tar.zst \
               dxmt=dist/konyak-macos-dxmt.tar.zst \
               vkd3d=dist/konyak-macos-vkd3d.tar.zst \
               dxvk-macos=dist/konyak-macos-dxvk-macos.tar.zst \
@@ -401,11 +473,7 @@ jobs:
 
   smoke-wine32on64:
     name: Verify Wine32-on-64 launch smoke
-    needs:
-      - build-wine-runtime
-      - build-dxmt-component
-      - build-vkd3d-component
-      - package-binary-components
+    needs: assemble-runtime-stack-artifact
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -424,34 +492,20 @@ jobs:
             sudo softwareupdate --install-rosetta --agree-to-license || true
           fi
 
-      - name: Download runtime artifacts
+      - name: Download runtime stack artifact
         uses: actions/download-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
-          path: dist
-
-      - name: Download DXMT artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist
-
-      - name: Download vkd3d artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-vkd3d
-          path: dist
-
-      - name: Download binary component artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-binary-components
+          name: konyak-macos-wine-runtime-stack
           path: dist
 
       - name: Verify Wine32-on-64 launch smoke
         run: |
           smoke_runtime_root="/tmp/konyak-wine32on64-smoke-runtime"
-          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
@@ -461,11 +515,7 @@ jobs:
 
   smoke-dxvk-d3d11:
     name: Verify DXVK D3D11 backend smoke
-    needs:
-      - build-wine-runtime
-      - build-dxmt-component
-      - build-vkd3d-component
-      - package-binary-components
+    needs: assemble-runtime-stack-artifact
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -484,44 +534,26 @@ jobs:
             sudo softwareupdate --install-rosetta --agree-to-license || true
           fi
 
-      - name: Download runtime artifacts
+      - name: Download runtime stack artifact
         uses: actions/download-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
-          path: dist
-
-      - name: Download DXMT artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist
-
-      - name: Download vkd3d artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-vkd3d
-          path: dist
-
-      - name: Download binary component artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-binary-components
+          name: konyak-macos-wine-runtime-stack
           path: dist
 
       - name: Verify DXVK D3D11 backend smoke
         run: |
           smoke_runtime_root="/tmp/konyak-dxvk-d3d11-smoke-runtime"
-          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
 
   smoke-dxmt-d3d11:
     name: Verify DXMT D3D11 backend smoke
-    needs:
-      - build-wine-runtime
-      - build-dxmt-component
-      - build-vkd3d-component
-      - package-binary-components
+    needs: assemble-runtime-stack-artifact
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -540,44 +572,26 @@ jobs:
             sudo softwareupdate --install-rosetta --agree-to-license || true
           fi
 
-      - name: Download runtime artifacts
+      - name: Download runtime stack artifact
         uses: actions/download-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
-          path: dist
-
-      - name: Download DXMT artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist
-
-      - name: Download vkd3d artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-vkd3d
-          path: dist
-
-      - name: Download binary component artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-binary-components
+          name: konyak-macos-wine-runtime-stack
           path: dist
 
       - name: Verify DXMT D3D11 backend smoke
         run: |
           smoke_runtime_root="/tmp/konyak-dxmt-d3d11-smoke-runtime"
-          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxmt-d3d11"
 
   smoke-vkd3d-d3d12:
     name: Verify vkd3d D3D12 backend smoke
-    needs:
-      - build-wine-runtime
-      - build-dxmt-component
-      - build-vkd3d-component
-      - package-binary-components
+    needs: assemble-runtime-stack-artifact
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -596,34 +610,20 @@ jobs:
             sudo softwareupdate --install-rosetta --agree-to-license || true
           fi
 
-      - name: Download runtime artifacts
+      - name: Download runtime stack artifact
         uses: actions/download-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
-          path: dist
-
-      - name: Download DXMT artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist
-
-      - name: Download vkd3d artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-vkd3d
-          path: dist
-
-      - name: Download binary component artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-binary-components
+          name: konyak-macos-wine-runtime-stack
           path: dist
 
       - name: Verify vkd3d D3D12 backend smoke
         run: |
           smoke_runtime_root="/tmp/konyak-vkd3d-d3d12-smoke-runtime"
-          ./scripts/assemble-runtime-stack.zsh dist "$smoke_runtime_root"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
 
@@ -631,7 +631,7 @@ jobs:
     name: Publish runtime release
     needs:
       - build-wine-runtime
-      - build-vkd3d-component
+      - assemble-runtime-stack-artifact
       - generate-release-metadata
       - smoke-wine32on64
       - smoke-dxvk-d3d11
@@ -644,28 +644,10 @@ jobs:
       KONYAK_RUNTIME_RELEASE_TAG: ${{ needs.build-wine-runtime.outputs.runtime-release-tag }}
       KONYAK_RUNTIME_RELEASE_TITLE: ${{ needs.build-wine-runtime.outputs.runtime-release-title }}
     steps:
-      - name: Download Wine runtime artifact
+      - name: Download runtime stack artifact
         uses: actions/download-artifact@v4
         with:
-          name: konyak-macos-wine-runtime
-          path: dist
-
-      - name: Download DXMT artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-dxmt
-          path: dist
-
-      - name: Download vkd3d artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-vkd3d
-          path: dist
-
-      - name: Download binary component artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: konyak-macos-binary-components
+          name: konyak-macos-wine-runtime-stack
           path: dist
 
       - name: Download release metadata
@@ -685,15 +667,7 @@ jobs:
           EOF
 
           release_assets=(
-            dist/konyak-macos-wine-runtime.tar.zst
-            dist/konyak-macos-dxmt.tar.zst
-            dist/konyak-macos-vkd3d.tar.zst
-            dist/konyak-macos-dxvk-macos.tar.zst
-            dist/konyak-macos-moltenvk.tar.zst
-            dist/konyak-macos-gstreamer.tar.zst
-            dist/konyak-macos-freetype.tar.zst
-            dist/konyak-macos-wine-mono.tar.zst
-            dist/konyak-macos-winetricks.tar.zst
+            dist/konyak-macos-wine-runtime-stack.tar.zst
             dist/konyak-macos-wine-runtime-stack-source.json
             dist/konyak-macos-runtime.release.json
           )

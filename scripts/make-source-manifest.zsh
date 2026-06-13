@@ -18,6 +18,7 @@ version="$(jq -r '.version' "$source_json")"
 archive_name="$(basename "$runtime_archive")"
 sha256="$(shasum -a 256 "$runtime_archive" | awk '{ print $1 }')"
 asset_base_url="${KONYAK_RELEASE_ASSET_BASE_URL:-}"
+single_stack_archive="${KONYAK_SINGLE_STACK_ARCHIVE:-0}"
 archive_url="$archive_name"
 if [[ -n "$asset_base_url" ]]; then
   archive_url="${asset_base_url%/}/$archive_name"
@@ -93,6 +94,10 @@ for spec in "${component_specs[@]}"; do
 
   component_sha256="$(shasum -a 256 "$component_archive" | awk '{ print $1 }')"
   component_url="$(component_archive_url "$component_archive")"
+  if [[ "$single_stack_archive" = "1" ]]; then
+    component_sha256="$sha256"
+    component_url="$archive_url"
+  fi
   component_archive_version="$(component_version "$component_id")"
   components_json="$(
     jq \

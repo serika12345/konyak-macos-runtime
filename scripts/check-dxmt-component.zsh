@@ -79,6 +79,10 @@ find_macho_nix_dylib_references() {
       otool -L "$candidate_path" |
         awk -v relative_path="$relative_path" \
           'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+
+      otool -l "$candidate_path" |
+        awk -v relative_path="$relative_path" \
+          '/LC_RPATH/ { getline; getline; if ($2 ~ /^\/nix\/store\//) print relative_path ": " $2 }'
     done
 }
 

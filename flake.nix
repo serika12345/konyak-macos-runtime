@@ -68,6 +68,13 @@
           } $out
         '';
 
+        checks.wine-configure-flags =
+          pkgs.runCommand "wine-configure-flags" { nativeBuildInputs = [ pkgs.zsh ]; }
+            ''
+              ${./scripts/check-wine-configure-flags.zsh} ${./nix/wine-crossover.nix}
+              touch $out
+            '';
+
         devShells.default = pkgs.mkShell {
           packages = [
             pkgs.bison

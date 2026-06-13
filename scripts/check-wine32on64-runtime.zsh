@@ -82,7 +82,75 @@ assert_file_kind "lib/wine/x86_64-windows/wow64win.dll" "PE32+ executable" \
 assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
   "host Unix ntdll.so"
 
-find_macho_nix_dylib_references() {
+assert_glob_match() {
+  setopt local_options null_glob
+
+  local description="$1"
+  shift
+  local matches=("$@")
+
+  if (( ${#matches[@]} == 0 )); then
+    echo "Missing $description." >&2
+    exit 65
+  fi
+}
+
+assert_dylib_install_name() {
+  local dylib_path="$1"
+  local expected_name="$2"
+  local install_name
+
+  install_name="$(otool -D "$dylib_path" | tail -n 1)"
+  if [[ "$install_name" != "$expected_name" ]]; then
+    echo "Unexpected install name for ${dylib_path#$runtime_root/}:" >&2
+    echo "expected: $expected_name" >&2
+    echo "actual:   $install_name" >&2
+    exit 65
+  fi
+}
+
+assert_macho_has_rpath() {
+  local relative_path="$1"
+  local expected_rpath="$2"
+  local target_path="$runtime_root/$relative_path"
+
+  if ! otool -l "$target_path" |
+    awk '/LC_RPATH/ { getline; getline; print $2 }' |
+    grep -Fx "$expected_rpath" >/dev/null; then
+    echo "$relative_path is missing LC_RPATH $expected_rpath." >&2
+    exit 65
+  fi
+}
+
+assert_runtime_dylib_glob() {
+  setopt local_options null_glob
+
+  local description="$1"
+  local expected_glob="$2"
+  local dylib_path
+  local dylibs=("$runtime_root"/lib/${~expected_glob})
+
+  assert_glob_match "$description" "${dylibs[@]}"
+  for dylib_path in "${dylibs[@]}"; do
+    assert_file_kind "${dylib_path#$runtime_root/}" "Mach-O 64-bit" "$description"
+    assert_dylib_install_name "$dylib_path" "@rpath/$(basename "$dylib_path")"
+    assert_macho_has_rpath "${dylib_path#$runtime_root/}" "@loader_path"
+  done
+}
+
+assert_runtime_dylib_glob "GnuTLS runtime dylib" "libgnutls*.dylib"
+assert_runtime_dylib_glob "GSSAPI runtime dylib" "libgssapi_krb5*.dylib"
+assert_runtime_dylib_glob "Kerberos runtime dylib" "libkrb5*.dylib"
+assert_runtime_dylib_glob "OpenCL runtime dylib" "libOpenCL*.dylib"
+assert_runtime_dylib_glob "libusb runtime dylib" "libusb-1.0*.dylib"
+
+assert_macho_has_rpath "lib/wine/x86_64-unix/secur32.so" "@loader_path/../../"
+assert_macho_has_rpath "lib/wine/x86_64-unix/bcrypt.so" "@loader_path/../../"
+assert_macho_has_rpath "lib/wine/x86_64-unix/kerberos.so" "@loader_path/../../"
+assert_macho_has_rpath "lib/wine/x86_64-unix/opencl.so" "@loader_path/../../"
+assert_macho_has_rpath "lib/wine/x86_64-unix/wineusb.so" "@loader_path/../../"
+
+find_macho_nix_references() {
   local scan_root
   local candidate_path
   local relative_path
@@ -104,14 +172,18 @@ find_macho_nix_dylib_references() {
         otool -L "$candidate_path" |
           awk -v relative_path="$relative_path" \
             'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+
+        otool -l "$candidate_path" |
+          awk -v relative_path="$relative_path" \
+            '/LC_RPATH/ { getline; getline; if ($2 ~ /^\/nix\/store\//) print relative_path ": " $2 }'
       done
   done
 }
 
-nix_dylib_references="$(find_macho_nix_dylib_references)"
-if [[ -n "$nix_dylib_references" ]]; then
-  echo "Wine runtime Mach-O files must not reference unpackaged Nix store dylibs:" >&2
-  echo "$nix_dylib_references" >&2
+nix_references="$(find_macho_nix_references)"
+if [[ -n "$nix_references" ]]; then
+  echo "Wine runtime Mach-O files must not reference unpackaged Nix store paths:" >&2
+  echo "$nix_references" >&2
   exit 65
 fi
 

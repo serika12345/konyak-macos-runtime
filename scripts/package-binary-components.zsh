@@ -149,6 +149,10 @@ assert_no_nix_dylib_references() {
         otool -L "$candidate_path" |
           awk -v relative_path="$relative_path" \
             'NR > 1 && $1 ~ /^\/nix\/store\/.*\.dylib$/ { print relative_path ": " $1 }'
+
+        otool -l "$candidate_path" |
+          awk -v relative_path="$relative_path" \
+            '/LC_RPATH/ { getline; getline; if ($2 ~ /^\/nix\/store\//) print relative_path ": " $2 }'
       done
   )"
 
@@ -157,6 +161,34 @@ assert_no_nix_dylib_references() {
     echo "$references" >&2
     exit 65
   fi
+}
+
+macho_rpaths() {
+  local target_path="$1"
+
+  otool -l "$target_path" |
+    awk '/LC_RPATH/ { getline; getline; print $2 }'
+}
+
+normalize_macho_rpaths() {
+  local target_path="$1"
+  local desired_rpath
+  local existing_rpath
+  local desired_rpaths=("${@:2}")
+
+  chmod u+w "$target_path"
+
+  while IFS= read -r existing_rpath; do
+    if [[ "$existing_rpath" == /nix/store/* ]]; then
+      install_name_tool -delete_rpath "$existing_rpath" "$target_path" 2>/dev/null || true
+    fi
+  done < <(macho_rpaths "$target_path")
+
+  for desired_rpath in "${desired_rpaths[@]}"; do
+    if ! macho_rpaths "$target_path" | grep -Fx "$desired_rpath" >/dev/null; then
+      install_name_tool -add_rpath "$desired_rpath" "$target_path"
+    fi
+  done
 }
 
 copy_nix_macho_closure() {
@@ -174,6 +206,7 @@ copy_nix_macho_closure() {
   fi
 
   if [[ -f "$target_path" ]]; then
+    normalize_macho_rpaths "$target_path" "@loader_path"
     return 0
   fi
 
@@ -199,6 +232,8 @@ copy_nix_macho_closure() {
         -change "$dependency" "@loader_path/$dependency_file_name" \
         "$target_path"
     done
+
+  normalize_macho_rpaths "$target_path" "@loader_path"
 }
 
 copy_nix_dylib_closure() {

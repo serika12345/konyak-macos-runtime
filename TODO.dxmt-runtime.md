@@ -4,6 +4,11 @@ Goal: make Konyak's macOS runtime use a CrossOver-derived Wine by default, keep
 DXVK usable without GPTK, and add DXMT/GPTK components as explicitly selected
 backends instead of implicit runtime overwrites.
 
+See `docs/crossover-runtime-compatibility.md` for the broader compatibility
+plan covering the CrossOver/nixpkgs comparison, GnuTLS and dlopen-facing dylib
+placement, the public single-archive distribution decision, and the phased
+normal-Wine-compatibility repair.
+
 ## Decisions
 
 - CrossOver-derived Wine is the default macOS Wine runtime source.
@@ -13,6 +18,10 @@ backends instead of implicit runtime overwrites.
   requirement.
 - DXMT is built by Konyak from FOSS sources with Nix before enabling Actions.
 - GPTK binaries remain user-imported and are not distributed from this repo.
+- Public macOS runtime releases should expose a single assembled runtime stack
+  archive. Separate Wine, DXMT, DXVK, vkd3d, MoltenVK, GStreamer, FreeType,
+  wine-mono, and winetricks artifacts remain internal CI units for focused
+  rebuild, verification, and rerun behavior.
 
 ## Runtime Layout Target
 
@@ -75,6 +84,8 @@ runtime/
       DXMT DLL set.
 - [ ] Add Wine-side DXMT prerequisites if the package requires hidden
       `winemac.drv` API exports.
+- [ ] Publish the default macOS runtime as one assembled stack archive while
+      retaining separate component artifacts inside CI.
 - [x] Keep DXVK packaging independent and usable without GPTK.
       The current `dxvk-macos` component combines the pinned Gcenx DXVK-macOS
       DLLs with upstream DXVK `v1.10.3` only for missing `d3d10.dll` and
