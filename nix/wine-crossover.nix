@@ -472,13 +472,29 @@ EOF
       ln -s wine "$out/bin/wine64"
     fi
 
+    runtime_dylib_file_name() {
+      local source_path="$1"
+
+      case "$source_path" in
+        "${lib.getLib libiconvReal}/lib/libiconv.2.dylib")
+          printf 'libiconv-gnu.2.dylib\n'
+          ;;
+        "${lib.getLib libiconvReal}/lib/libiconv.dylib")
+          printf 'libiconv-gnu.dylib\n'
+          ;;
+        *)
+          basename "$source_path"
+          ;;
+      esac
+    }
+
     copy_runtime_dylib_closure() {
       local source_path="$1"
       local dependency
       local dependency_file_name
       local target_path
 
-      dependency_file_name="$(basename "$source_path")"
+      dependency_file_name="$(runtime_dylib_file_name "$source_path")"
       target_path="$out/lib/$dependency_file_name"
 
       if [ ! -f "$source_path" ]; then
@@ -507,7 +523,7 @@ EOF
           fi
 
           copy_runtime_dylib_closure "$dependency"
-          dependency_file_name="$(basename "$dependency")"
+          dependency_file_name="$(runtime_dylib_file_name "$dependency")"
           install_name_tool \
             -change "$dependency" "@loader_path/$dependency_file_name" \
             "$target_path"
@@ -545,7 +561,7 @@ EOF
           fi
 
           copy_runtime_dylib_closure "$dependency"
-          dependency_file_name="$(basename "$dependency")"
+          dependency_file_name="$(runtime_dylib_file_name "$dependency")"
           install_name_tool \
             -change "$dependency" "@loader_path/$dependency_file_name" \
             "$target_path"
@@ -575,8 +591,15 @@ EOF
     # Wine probes these libraries at runtime with dlopen rather than linking
     # every Unix module to them directly, so direct Mach-O dependency scanning
     # alone is not enough to keep them in the portable runtime root.
-    rm -f "$out/lib/libiconv.2.dylib" "$out/lib/libiconv.dylib"
+    rm -f \
+      "$out/lib/libiconv.2.dylib" \
+      "$out/lib/libiconv.dylib" \
+      "$out/lib/libiconv-darwin.2.dylib" \
+      "$out/lib/libiconv-gnu.2.dylib" \
+      "$out/lib/libiconv-gnu.dylib"
     copy_runtime_dylib_glob "${lib.getLib libiconvReal}/lib/libiconv*.dylib"
+    copy_runtime_dylib_as "${lib.getLib libiconv}/lib/libiconv.2.dylib" \
+      "libiconv.2.dylib"
     copy_runtime_dylib_as "${lib.getLib libiconv}/lib/libiconv.2.dylib" \
       "libiconv-darwin.2.dylib"
     copy_runtime_dylib_glob "${lib.getLib libiconv}/lib/libcharset*.dylib"
@@ -671,7 +694,7 @@ EOF
           esac
 
           copy_runtime_dylib_closure "$dependency"
-          dependency_file_name="$(basename "$dependency")"
+          dependency_file_name="$(runtime_dylib_file_name "$dependency")"
           replacement_reference="$(runtime_dylib_reference "$target_path" "$dependency_file_name")"
           install_name_tool \
             -change "$dependency" "$replacement_reference" \
@@ -782,6 +805,12 @@ EOF
       remaining="$(
         find "$out/bin" "$out/lib" -type f -print |
           while IFS= read -r candidate_path; do
+            case "$candidate_path" in
+              "$out/lib/libiconv.2.dylib"|"$out/lib/libiconv-darwin.2.dylib")
+                continue
+                ;;
+            esac
+
             file_output="$(/usr/bin/file "$candidate_path")"
             case "$file_output" in
               *Mach-O*) ;;
@@ -806,10 +835,11 @@ EOF
     # rewriting Wine modules. Re-run normalization so those newly copied dylibs
     # also lose Nix store LC_RPATH values before the final closure check.
     normalize_runtime_machos
-    # Darwin packages in nixpkgs use the system libiconv ABI, while GnuTLS and
-    # libidn2 require GNU libiconv. Keep GNU libiconv at the standard soname for
-    # the GnuTLS closure and retarget only compatibility-7 Darwin consumers to
-    # the separately bundled Darwin libiconv alias.
+    # Darwin packages in nixpkgs and macOS system libraries use the Darwin
+    # libiconv ABI, while GnuTLS and libidn2 require GNU libiconv. Keep the
+    # standard libiconv soname Darwin-compatible because DYLD_LIBRARY_PATH can
+    # override /usr/lib/libiconv.2.dylib for system libraries such as CUPS, and
+    # retarget GNU consumers to the separately bundled GNU libiconv alias.
     patch_darwin_iconv_dependents
     assert_darwin_iconv_dependents_patched
 

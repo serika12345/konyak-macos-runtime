@@ -210,11 +210,14 @@ wine_dll_paths=(
 )
 
 export WINEPREFIX="$prefix"
+export WINEARCH=win64
 export WINEDEBUG="fixme-all"
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
 export GST_DEBUG="1"
 export GST_PLUGIN_SYSTEM_PATH="$runtime_root/lib/gstreamer-1.0"
 export GST_PLUGIN_SCANNER="$runtime_root/libexec/gstreamer-1.0/gst-plugin-scanner"
 export GST_REGISTRY="$work_root/gstreamer-registry.bin"
+export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-0}"
 export WINEDATADIR="$runtime_root/share/wine"
 export WINEDLLPATH="${(j/:/)wine_dll_paths}"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"

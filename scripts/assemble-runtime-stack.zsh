@@ -116,7 +116,7 @@ trap 'rm -rf "$iconv_guard_dir"' EXIT
 preserve_root_iconv_runtime() {
   local library_name
 
-  for library_name in libiconv.2.dylib libiconv.dylib libiconv-darwin.2.dylib; do
+  for library_name in libiconv.2.dylib libiconv-darwin.2.dylib libiconv-gnu.2.dylib; do
     if [[ ! -f "$runtime_root/lib/$library_name" ]]; then
       echo "Missing Wine root iconv runtime library: $runtime_root/lib/$library_name" >&2
       exit 65
@@ -124,12 +124,19 @@ preserve_root_iconv_runtime() {
 
     cp -Lf "$runtime_root/lib/$library_name" "$iconv_guard_dir/$library_name"
   done
+
+  for library_name in libiconv.dylib libiconv-gnu.dylib; do
+    if [[ -f "$runtime_root/lib/$library_name" ]]; then
+      cp -Lf "$runtime_root/lib/$library_name" "$iconv_guard_dir/$library_name"
+    fi
+  done
 }
 
 restore_root_iconv_runtime() {
   local library_name
 
-  for library_name in libiconv.2.dylib libiconv.dylib libiconv-darwin.2.dylib; do
+  for library_name in "$iconv_guard_dir"/*(N); do
+    library_name="${library_name:t}"
     cp -f "$iconv_guard_dir/$library_name" "$runtime_root/lib/$library_name"
     chmod u+w "$runtime_root/lib/$library_name"
   done

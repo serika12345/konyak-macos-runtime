@@ -276,10 +276,14 @@ Phase 3 is implemented for the current CrossOver-derived runtime:
 The single assembled stack also preserves the mixed libiconv ABI requirements
 introduced by the combined Wine and component closure:
 
-- GNU libiconv remains at `<runtime>/lib/libiconv.2.dylib` for GnuTLS and
+- Darwin ABI libiconv remains at the standard
+  `<runtime>/lib/libiconv.2.dylib` name because `DYLD_LIBRARY_PATH` can cause
+  runtime-root libraries to override macOS system libraries such as
+  `/usr/lib/libiconv.2.dylib`.
+- GNU libiconv is kept as `<runtime>/lib/libiconv-gnu.2.dylib` for GnuTLS and
   libraries such as `libidn2` that require `_libiconv`.
-- Darwin ABI libiconv is kept as
-  `<runtime>/lib/libiconv-darwin.2.dylib`.
+- Darwin ABI libiconv is also kept as
+  `<runtime>/lib/libiconv-darwin.2.dylib` for explicit root-local retargeting.
 - Immediate root `bin/*` and `lib/*` Mach-O files that declare the Darwin
   compatibility-version-7 `libiconv.2.dylib` dependency are retargeted to the
   Darwin alias after component extraction.
