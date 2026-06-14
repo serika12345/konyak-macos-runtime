@@ -180,6 +180,7 @@ print_runtime_diagnostics() {
   echo "runtime_root=$runtime_root" >&2
   echo "probe_path=$probe_path" >&2
   echo "WINEPREFIX=$WINEPREFIX" >&2
+  echo "WINEDATADIR=$WINEDATADIR" >&2
   echo "WINEDLLPATH=$WINEDLLPATH" >&2
   echo "WINEDLLOVERRIDES=$WINEDLLOVERRIDES" >&2
   echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >&2
@@ -213,24 +214,6 @@ print_runtime_diagnostics() {
       print_log_excerpt "${log_path:t}" "$log_path"
     done
   echo "----- end backend smoke diagnostics -----" >&2
-}
-
-sync_override_dlls() {
-  local source_path
-
-  if (( ${#override_x64_files[@]} > 0 )); then
-    mkdir -p "$prefix/drive_c/windows/system32"
-    for source_path in "${override_x64_files[@]}"; do
-      cp -f "$source_path" "$prefix/drive_c/windows/system32/${source_path:t}"
-    done
-  fi
-
-  if (( ${#override_x86_files[@]} > 0 )); then
-    mkdir -p "$prefix/drive_c/windows/syswow64"
-    for source_path in "${override_x86_files[@]}"; do
-      cp -f "$source_path" "$prefix/drive_c/windows/syswow64/${source_path:t}"
-    done
-  fi
 }
 
 run_wine_with_timeout() {
@@ -273,6 +256,27 @@ run_wine_with_timeout() {
   fi
 }
 
+install_konyak_backend_override_dlls() {
+  local source_path
+
+  # This mirrors Konyak's set-runtime-settings bottle mutation. It is not used
+  # for Wine Mono/Gecko addon probing and must not be extended to hide prefix
+  # initialization failures.
+  if (( ${#override_x64_files[@]} > 0 )); then
+    mkdir -p "$prefix/drive_c/windows/system32"
+    for source_path in "${override_x64_files[@]}"; do
+      cp -f "$source_path" "$prefix/drive_c/windows/system32/${source_path:t}"
+    done
+  fi
+
+  if (( ${#override_x86_files[@]} > 0 )); then
+    mkdir -p "$prefix/drive_c/windows/syswow64"
+    for source_path in "${override_x86_files[@]}"; do
+      cp -f "$source_path" "$prefix/drive_c/windows/syswow64/${source_path:t}"
+    done
+  fi
+}
+
 stop_smoke_processes() {
   if [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; then
     kill -TERM "$smoke_pid" 2>/dev/null || true
@@ -312,11 +316,12 @@ wine_dll_paths=(
 export WINEPREFIX="$prefix"
 export WINEARCH=win64
 export WINEDEBUG="${WINEDEBUG:--all}"
-export WINEDLLOVERRIDES="$backend_overrides;mscoree,mshtml="
+export WINEDLLOVERRIDES="$backend_overrides"
 export GST_DEBUG="${GST_DEBUG:-1}"
 export GST_PLUGIN_SYSTEM_PATH="$runtime_root/lib/gstreamer-1.0"
 export GST_PLUGIN_SCANNER="$runtime_root/libexec/gstreamer-1.0/gst-plugin-scanner"
 export GST_REGISTRY="$work_root/gstreamer-registry.bin"
+export WINEDATADIR="$runtime_root/share/wine"
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-0}"
 export DXVK_LOG_LEVEL="${DXVK_LOG_LEVEL:-debug}"
 export DXVK_LOG_PATH="$work_root"
@@ -333,6 +338,8 @@ run_wine_with_timeout \
 
 "$wineserver_executable" -w >/dev/null 2>&1 || true
 
+install_konyak_backend_override_dlls
+
 run_wine_with_timeout \
   "mac graphics driver registry update" \
   "$registry_stdout_path" \
@@ -342,8 +349,6 @@ run_wine_with_timeout \
     /v Graphics /t REG_SZ /d mac /f
 
 "$wineserver_executable" -w >/dev/null 2>&1 || true
-
-sync_override_dlls
 
 run_wine_with_timeout \
   "$backend" \

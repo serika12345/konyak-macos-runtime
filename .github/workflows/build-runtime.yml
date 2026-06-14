@@ -317,6 +317,19 @@ jobs:
             -C "$gstreamer_component_root"
           ./scripts/check-gstreamer-component.zsh "$gstreamer_component_root"
 
+      - name: Verify Wine addon components
+        run: |
+          addon_component_root="$RUNNER_TEMP/konyak-wine-addons-component"
+          rm -rf "$addon_component_root"
+          mkdir -p "$addon_component_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-mono.tar.zst \
+            -C "$addon_component_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-gecko.tar.zst \
+            -C "$addon_component_root"
+          ./scripts/check-wine-addons-component.zsh "$addon_component_root"
+
       - name: Upload binary component artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -327,6 +340,7 @@ jobs:
             dist/konyak-macos-gstreamer.tar.zst
             dist/konyak-macos-freetype.tar.zst
             dist/konyak-macos-wine-mono.tar.zst
+            dist/konyak-macos-wine-gecko.tar.zst
             dist/konyak-macos-winetricks.tar.zst
           if-no-files-found: error
           retention-days: 14
@@ -386,6 +400,7 @@ jobs:
           ./scripts/check-vkd3d-component.zsh "$runtime_stack_root"
           ./scripts/check-dxvk-component.zsh "$runtime_stack_root"
           ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
+          ./scripts/check-wine-addons-component.zsh "$runtime_stack_root"
 
       - name: Upload runtime stack artifact
         uses: actions/upload-artifact@v4
@@ -459,6 +474,7 @@ jobs:
               gstreamer=dist/konyak-macos-gstreamer.tar.zst \
               freetype=dist/konyak-macos-freetype.tar.zst \
               wine-mono=dist/konyak-macos-wine-mono.tar.zst \
+              wine-gecko=dist/konyak-macos-wine-gecko.tar.zst \
               winetricks=dist/konyak-macos-winetricks.tar.zst
 
       - name: Upload release metadata

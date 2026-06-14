@@ -10,8 +10,8 @@ CrossOver-derived graphics stack.
 Konyak's macOS runtime goal is not to copy CrossOver wholesale. The goal is:
 
 - use a CrossOver-derived Wine where needed for D3DMetal/GPTK and Wine32-on-64;
-- provide DXVK, DXMT, vkd3d, MoltenVK, GStreamer, and wine-mono at Konyak
-  runtime quality;
+- provide DXVK, DXMT, vkd3d, MoltenVK, GStreamer, wine-mono, and wine-gecko at
+  Konyak runtime quality;
 - avoid breaking applications that worked with a normal upstream Wine runtime;
 - keep runtime behavior reproducible from Konyak-owned artifacts instead of host
   shell state or local Homebrew/Nix paths.
@@ -42,8 +42,8 @@ The current Konyak CrossOver-derived runtime has the right high-level direction:
 - CrossOver-derived Wine is the macOS Wine source.
 - Wine32-on-64 is built with `--enable-archs=i386,x86_64`.
 - Vulkan is enabled.
-- DXVK, DXMT, vkd3d, MoltenVK, GStreamer, FreeType, wine-mono, and winetricks
-  are built or packaged as explicit runtime stack payloads.
+- DXVK, DXMT, vkd3d, MoltenVK, GStreamer, FreeType, wine-mono, wine-gecko, and
+  winetricks are built or packaged as explicit runtime stack payloads.
 - GPTK/D3DMetal remains user-imported instead of redistributed.
 
 The current problems are lower-level compatibility and packaging issues:
@@ -83,6 +83,7 @@ CI may still produce separate internal artifacts for:
 - GStreamer;
 - FreeType;
 - wine-mono;
+- wine-gecko;
 - winetricks.
 
 Those internal artifacts are build and verification units. They are not the

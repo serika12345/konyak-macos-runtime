@@ -63,6 +63,7 @@ verification units:
 - GStreamer, including plugins and `gst-plugin-scanner`
 - FreeType
 - wine-mono
+- wine-gecko
 - winetricks
 
 Release builds verify Wine32-on-64 in two stages:
@@ -76,9 +77,10 @@ Release builds verify Wine32-on-64 in two stages:
 
 Release builds also run backend smoke probes against an assembled runtime stack.
 These probes build small x86_64 Windows executables with mingw, initialize a
-temporary Wine prefix, apply the same native override DLL placement expected by
-Konyak, and verify DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device creation.
-They check runtime behavior rather than binary identity with CrossOver.
+temporary Wine prefix, apply the same backend DLL placement and
+`WINEDLLOVERRIDES` expected after Konyak `set-runtime-settings`, and verify
+DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device creation. They check runtime
+behavior rather than binary identity with CrossOver.
 
 Release builds also run a GUI launch smoke against the assembled runtime stack
 through `wine64 start /unix <program>`, matching Konyak's normal macOS `.exe`

@@ -54,6 +54,7 @@ jobs:
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
+          ./scripts/check-wine-addons-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-gui-launch.zsh $smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"

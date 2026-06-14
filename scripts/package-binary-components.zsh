@@ -38,9 +38,15 @@ readonly moltenvk_version="v1.4.1"
 readonly moltenvk_url="https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-macos.tar"
 readonly moltenvk_sha256="5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf"
 
-readonly wine_mono_version="11.1.0"
-readonly wine_mono_url="https://github.com/wine-mono/wine-mono/releases/download/wine-mono-11.1.0/wine-mono-11.1.0-x86.msi"
-readonly wine_mono_sha256="deb0341431f8260b209fff6bc79ddcc5414b97f8e9236ab9fbdca4ce59e0a9b9"
+readonly wine_mono_version="10.4.1"
+readonly wine_mono_url="https://github.com/wine-mono/wine-mono/releases/download/wine-mono-10.4.1/wine-mono-10.4.1-x86.msi"
+readonly wine_mono_sha256="071f4b2887e1c97a11d791ff3d65be9429eed6dec4c2708888bfd546ba358e23"
+
+readonly wine_gecko_version="2.47.4"
+readonly wine_gecko_x86_url="https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86.msi"
+readonly wine_gecko_x86_sha256="26cecc47706b091908f7f814bddb074c61beb8063318e9efc5a7f789857793d6"
+readonly wine_gecko_x86_64_url="https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86_64.msi"
+readonly wine_gecko_x86_64_sha256="e590b7d988a32d6aa4cf1d8aa3aa3d33766fdd4cf4c89c2dcc2095ecb28d066f"
 
 readonly winetricks_version="20260125"
 readonly winetricks_url="https://raw.githubusercontent.com/Winetricks/winetricks/20260125/src/winetricks"
@@ -395,6 +401,22 @@ package_wine_mono() {
   archive_payload "$payload_root" "$archive_path"
 }
 
+package_wine_gecko() {
+  local x86_archive_cache="$cache_dir/wine-gecko-$wine_gecko_version-x86.msi"
+  local x86_64_archive_cache="$cache_dir/wine-gecko-$wine_gecko_version-x86_64.msi"
+  local payload_root="$dist_dir/work/wine-gecko/payload"
+  local archive_path="$dist_dir/konyak-macos-wine-gecko.tar.zst"
+
+  download_if_missing "$wine_gecko_x86_url" "$x86_archive_cache" "$wine_gecko_x86_sha256"
+  download_if_missing "$wine_gecko_x86_64_url" "$x86_64_archive_cache" "$wine_gecko_x86_64_sha256"
+  reset_dir "$dist_dir/work/wine-gecko"
+  mkdir -p "$payload_root/share/wine/gecko"
+  cp -f "$x86_archive_cache" "$payload_root/share/wine/gecko/wine-gecko-$wine_gecko_version-x86.msi"
+  cp -f "$x86_64_archive_cache" "$payload_root/share/wine/gecko/wine-gecko-$wine_gecko_version-x86_64.msi"
+  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "wine-gecko" "wine-gecko-$wine_gecko_version"
+  archive_payload "$payload_root" "$archive_path"
+}
+
 package_winetricks() {
   local script_cache="$cache_dir/winetricks-$winetricks_version"
   local payload_root="$dist_dir/work/winetricks/payload"
@@ -414,6 +436,7 @@ package_moltenvk
 package_gstreamer
 package_freetype
 package_wine_mono
+package_wine_gecko
 package_winetricks
 
 rm -rf "$dist_dir/work"

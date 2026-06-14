@@ -46,7 +46,10 @@ component_version() {
       echo "nix-freetype"
       ;;
     wine-mono)
-      echo "wine-mono-11.1.0"
+      echo "wine-mono-10.4.1"
+      ;;
+    wine-gecko)
+      echo "wine-gecko-2.47.4"
       ;;
     winetricks)
       echo "20260125"

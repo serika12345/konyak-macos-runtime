@@ -20,8 +20,8 @@ normal-Wine-compatibility repair.
 - GPTK binaries remain user-imported and are not distributed from this repo.
 - Public macOS runtime releases should expose a single assembled runtime stack
   archive. Separate Wine, DXMT, DXVK, vkd3d, MoltenVK, GStreamer, FreeType,
-  wine-mono, and winetricks artifacts remain internal CI units for focused
-  rebuild, verification, and rerun behavior.
+  wine-mono, wine-gecko, and winetricks artifacts remain internal CI units for
+  focused rebuild, verification, and rerun behavior.
 
 ## Runtime Layout Target
 

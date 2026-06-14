@@ -186,11 +186,12 @@ trap cleanup EXIT INT TERM
 export WINEPREFIX="$prefix"
 export WINEARCH=win64
 export WINEDEBUG="${WINEDEBUG:--all}"
-export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
 export GST_DEBUG="${GST_DEBUG:-1}"
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-0}"
+export WINEDATADIR="$runtime_root/share/wine"
 export WINEDLLPATH="$runtime_root/lib/wine/x86_64-windows:$runtime_root/lib/wine/i386-windows:$runtime_root/lib/wine${WINEDLLPATH:+:$WINEDLLPATH}"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+unset WINEDLLOVERRIDES
 unset DYLD_FALLBACK_LIBRARY_PATH
 
 run_wine_with_timeout \

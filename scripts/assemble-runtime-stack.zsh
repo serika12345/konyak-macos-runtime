@@ -43,6 +43,7 @@ archives=(
   konyak-macos-gstreamer.tar.zst
   konyak-macos-freetype.tar.zst
   konyak-macos-wine-mono.tar.zst
+  konyak-macos-wine-gecko.tar.zst
   konyak-macos-winetricks.tar.zst
 )
 
@@ -243,6 +244,7 @@ component_archives=(
   konyak-macos-gstreamer.tar.zst
   konyak-macos-freetype.tar.zst
   konyak-macos-wine-mono.tar.zst
+  konyak-macos-wine-gecko.tar.zst
   konyak-macos-winetricks.tar.zst
 )
 for component_archive in "${component_archives[@]}"; do
