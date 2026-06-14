@@ -27,6 +27,11 @@ host_unix_ntdll_candidates=(
   "lib/wine/aarch64-unix/ntdll.so"
 )
 
+host_unix_loader_candidates=(
+  "lib/wine/x86_64-unix/wine"
+  "lib/wine/aarch64-unix/wine"
+)
+
 for relative_path in "${required_paths[@]}"; do
   if [[ ! -e "$runtime_root/$relative_path" ]]; then
     echo "Missing Wine32-on-64 runtime path: $relative_path" >&2
@@ -49,6 +54,21 @@ done
 
 if [[ -z "$host_unix_ntdll_path" ]]; then
   echo "Missing Wine32-on-64 host Unix ntdll path: ${host_unix_ntdll_candidates[*]}" >&2
+  exit 65
+fi
+
+host_unix_dir="${host_unix_ntdll_path%/ntdll.so}"
+
+host_unix_loader_path=""
+for candidate_path in "${host_unix_loader_candidates[@]}"; do
+  if [[ -e "$runtime_root/$candidate_path" ]]; then
+    host_unix_loader_path="$candidate_path"
+    break
+  fi
+done
+
+if [[ -z "$host_unix_loader_path" ]]; then
+  echo "Missing Wine32-on-64 host Unix loader path: ${host_unix_loader_candidates[*]}" >&2
   exit 65
 fi
 
@@ -160,6 +180,30 @@ assert_macho_rejects_dependency() {
   fi
 }
 
+assert_macho_uses_only_system_dependencies() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local unexpected_dependencies
+
+  unexpected_dependencies="$(
+    otool -L "$target_path" |
+      awk '
+        NR <= 1 { next }
+        $1 == "/usr/lib/libSystem.B.dylib" { next }
+        $1 ~ /^\/usr\/lib\// { next }
+        $1 ~ /^\/System\/Library\// { next }
+        { print $1 }
+      '
+  )"
+
+  if [[ -n "$unexpected_dependencies" ]]; then
+    echo "$relative_path must not depend on packaged or third-party dylibs." >&2
+    echo "Wine can copy this loader to a temporary winetemp path where @loader_path no longer points at the runtime root." >&2
+    echo "$unexpected_dependencies" >&2
+    exit 65
+  fi
+}
+
 assert_runtime_dylib_glob() {
   setopt local_options null_glob
 
@@ -190,11 +234,12 @@ assert_macho_rejects_dependency "lib/libidn2.0.dylib" "@loader_path/libiconv.2.d
 assert_macho_uses_dependency "lib/libintl.8.dylib" "@loader_path/libiconv-darwin.2.dylib"
 assert_macho_rejects_dependency "lib/libintl.8.dylib" "@loader_path/libiconv.2.dylib"
 
-assert_macho_has_rpath "lib/wine/x86_64-unix/secur32.so" "@loader_path/../../"
-assert_macho_has_rpath "lib/wine/x86_64-unix/bcrypt.so" "@loader_path/../../"
-assert_macho_has_rpath "lib/wine/x86_64-unix/kerberos.so" "@loader_path/../../"
-assert_macho_has_rpath "lib/wine/x86_64-unix/opencl.so" "@loader_path/../../"
-assert_macho_has_rpath "lib/wine/x86_64-unix/wineusb.so" "@loader_path/../../"
+assert_macho_has_rpath "$host_unix_dir/secur32.so" "@loader_path/../../"
+assert_macho_has_rpath "$host_unix_dir/bcrypt.so" "@loader_path/../../"
+assert_macho_has_rpath "$host_unix_dir/kerberos.so" "@loader_path/../../"
+assert_macho_has_rpath "$host_unix_dir/opencl.so" "@loader_path/../../"
+assert_macho_has_rpath "$host_unix_dir/wineusb.so" "@loader_path/../../"
+assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
 
 find_macho_nix_references() {
   local scan_root

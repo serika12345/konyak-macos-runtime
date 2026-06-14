@@ -411,7 +411,10 @@ EOF
     export CROSSLDFLAGS=""
 
     export CPPFLAGS="$CPPFLAGS -I${libpcap}/include -I${libinotify-kqueue}/include"
-    export LDFLAGS="$LDFLAGS -L${libpcap}/lib -L${libinotify-kqueue}/lib"
+    # CrossOver's copied Wine loader only depends on system libraries. Keep the
+    # Konyak host loader the same way; Wine may copy lib/wine/*-unix/wine to a
+    # temporary winetemp path where @loader_path no longer points at $runtime/lib.
+    export LDFLAGS="$LDFLAGS -L${libpcap}/lib -L${libinotify-kqueue}/lib -Wl,-dead_strip_dylibs"
     export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I${libpcap}/include -I${libinotify-kqueue}/include -Wno-error=implicit-function-declaration"
     export NIX_LDFLAGS="$NIX_LDFLAGS -L${libpcap}/lib -L${libinotify-kqueue}/lib -rpath ${moltenvk}/lib ${llvmPackages.compiler-rt}/lib/darwin/libclang_rt.osx.a"
   '';
@@ -830,6 +833,42 @@ EOF
       fi
     }
 
+    assert_macho_uses_only_system_dependencies() {
+      local target_path="$1"
+      local relative_path="''${target_path#$out/}"
+      local unexpected_dependencies
+
+      unexpected_dependencies="$(
+        otool -L "$target_path" |
+          awk '
+            NR <= 1 { next }
+            $1 == "/usr/lib/libSystem.B.dylib" { next }
+            $1 ~ /^\/usr\/lib\// { next }
+            $1 ~ /^\/System\/Library\// { next }
+            { print $1 }
+          '
+      )"
+
+      if [ -n "$unexpected_dependencies" ]; then
+        echo "$relative_path must not depend on packaged or third-party dylibs." >&2
+        echo "Wine can copy this loader to a temporary winetemp path where @loader_path no longer points at the runtime root." >&2
+        echo "$unexpected_dependencies" >&2
+        exit 1
+      fi
+    }
+
+    assert_wine_loader_safe_for_temp_copy() {
+      local loader_path
+
+      loader_path="$(find "$out/lib/wine" -path '*/wine' -type f | head -n 1)"
+      if [ -z "$loader_path" ]; then
+        echo "Missing Wine Unix loader under: $out/lib/wine" >&2
+        exit 1
+      fi
+
+      assert_macho_uses_only_system_dependencies "$loader_path"
+    }
+
     normalize_runtime_machos
     # The first pass may copy new dylib closure files into $out/lib while
     # rewriting Wine modules. Re-run normalization so those newly copied dylibs
@@ -842,6 +881,7 @@ EOF
     # retarget GNU consumers to the separately bundled GNU libiconv alias.
     patch_darwin_iconv_dependents
     assert_darwin_iconv_dependents_patched
+    assert_wine_loader_safe_for_temp_copy
 
     remaining_nix_references="$(find_macho_nix_references)"
     if [ -n "$remaining_nix_references" ]; then
