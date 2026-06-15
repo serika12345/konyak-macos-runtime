@@ -279,6 +279,10 @@ jobs:
       - name: Enable Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
 
+      - name: Verify Wine addon versions
+        run: |
+          nix shell nixpkgs#gnutar -c ./scripts/check-wine-addon-versions.zsh
+
       - name: Package binary runtime components
         run: |
           mkdir -p dist
