@@ -1,0 +1,382 @@
+name: Promote runtime candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: Draft/prerelease candidate tag containing runtime assets
+        required: true
+        type: string
+      release_tag:
+        description: Optional final release tag; must match release metadata version when set
+        required: false
+        type: string
+      delete_candidate:
+        description: Delete the candidate release after successful promotion
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  normalize-candidate:
+    name: Normalize candidate release payload
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      release-tag: ${{ steps.normalize.outputs.release-tag }}
+      release-title: ${{ steps.normalize.outputs.release-title }}
+    steps:
+      - name: Download candidate release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          mkdir -p candidate
+          gh release download "$CANDIDATE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern konyak-macos-runtime.release.json \
+            --pattern konyak-macos-wine-runtime-stack-source.json \
+            --pattern konyak-macos-wine-runtime-stack.tar.zst \
+            --dir candidate \
+            --clobber
+
+      - name: Normalize final release manifest
+        id: normalize
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          required_assets=(
+            candidate/konyak-macos-runtime.release.json
+            candidate/konyak-macos-wine-runtime-stack-source.json
+            candidate/konyak-macos-wine-runtime-stack.tar.zst
+          )
+          for asset in "${required_assets[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "missing candidate asset: $asset" >&2
+              exit 66
+            fi
+          done
+
+          release_tag="$(jq -r '.version // ""' candidate/konyak-macos-runtime.release.json)"
+          if [[ -z "$release_tag" || "$release_tag" == "null" ]]; then
+            echo "candidate release metadata must contain a non-empty version." >&2
+            exit 65
+          fi
+          if [[ -n "$REQUESTED_RELEASE_TAG" && "$REQUESTED_RELEASE_TAG" != "$release_tag" ]]; then
+            echo "release_tag input ($REQUESTED_RELEASE_TAG) does not match candidate metadata version ($release_tag)." >&2
+            exit 65
+          fi
+          if [[ "$CANDIDATE_TAG" == "$release_tag" ]]; then
+            echo "candidate_tag must not be the final runtime release tag ($release_tag)." >&2
+            exit 65
+          fi
+
+          jq -e --arg release_tag "$release_tag" '
+            .schemaVersion == 1 and
+            .appId == "konyak" and
+            .version == $release_tag and
+            .runtimeStack.runtimeId == "konyak-macos-wine" and
+            .runtimeStack.stackId == "macos-konyak-runtime-stack" and
+            .runtimeStack.sourceManifestFileName == "konyak-macos-wine-runtime-stack-source.json"
+          ' candidate/konyak-macos-runtime.release.json >/dev/null
+
+          jq -e '
+            .schemaVersion == 1 and
+            .runtimeId == "konyak-macos-wine" and
+            .stackId == "macos-konyak-runtime-stack" and
+            (.components | type) == "array" and
+            ([.components[].id] | contains([
+              "wine",
+              "dxvk-macos",
+              "moltenvk",
+              "gstreamer",
+              "freetype",
+              "wine-mono",
+              "wine-gecko",
+              "winetricks",
+              "vkd3d",
+              "dxmt"
+            ]))
+          ' candidate/konyak-macos-wine-runtime-stack-source.json >/dev/null
+
+          stack_sha="$(sha256sum candidate/konyak-macos-wine-runtime-stack.tar.zst | awk '{ print $1 }')"
+          stack_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/konyak-macos-wine-runtime-stack.tar.zst"
+
+          mkdir -p dist
+          cp candidate/konyak-macos-wine-runtime-stack.tar.zst dist/
+          cp candidate/konyak-macos-runtime.release.json dist/
+          jq \
+            --arg stack_url "$stack_url" \
+            --arg stack_sha "$stack_sha" \
+            '.components |= map(.archiveUrl = $stack_url | .sha256 = $stack_sha)' \
+            candidate/konyak-macos-wine-runtime-stack-source.json \
+            > dist/konyak-macos-wine-runtime-stack-source.json
+
+          echo "release-tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release-title=Konyak macOS runtime $release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Upload normalized release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: |
+            dist/konyak-macos-runtime.release.json
+            dist/konyak-macos-wine-runtime-stack-source.json
+            dist/konyak-macos-wine-runtime-stack.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke-wine32on64:
+    name: Verify Wine32-on-64 launch smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify Wine32-on-64 launch smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-wine32on64-candidate-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
+          ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
+          ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
+          ./scripts/check-wine-addons-component.zsh "$smoke_runtime_root"
+          ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
+
+  smoke-gui-launch:
+    name: Verify GUI start /unix smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify GUI start /unix smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-gui-candidate-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-gui-launch.zsh $smoke_runtime_root"
+
+  smoke-dxvk-d3d11:
+    name: Verify DXVK D3D11 backend smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify DXVK D3D11 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-dxvk-candidate-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
+
+  smoke-dxmt-d3d11:
+    name: Verify DXMT D3D11 backend smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify DXMT D3D11 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-dxmt-candidate-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxmt-d3d11"
+
+  smoke-vkd3d-d3d12:
+    name: Verify vkd3d D3D12 backend smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify vkd3d D3D12 backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-vkd3d-candidate-smoke-runtime"
+          rm -rf "$smoke_runtime_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
+
+  publish-release:
+    name: Publish verified runtime release
+    needs:
+      - normalize-candidate
+      - smoke-wine32on64
+      - smoke-gui-launch
+      - smoke-dxvk-d3d11
+      - smoke-dxmt-d3d11
+      - smoke-vkd3d-d3d12
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      DELETE_CANDIDATE: ${{ inputs.delete_candidate }}
+      KONYAK_RUNTIME_RELEASE_TAG: ${{ needs.normalize-candidate.outputs.release-tag }}
+      KONYAK_RUNTIME_RELEASE_TITLE: ${{ needs.normalize-candidate.outputs.release-title }}
+    steps:
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cat > dist/release-notes.md <<EOF
+          Konyak macOS runtime ${KONYAK_RUNTIME_RELEASE_TAG}.
+
+          This release was promoted by GitHub Actions from candidate ${CANDIDATE_TAG}
+          after runtime layout, Wine32-on-64, GUI launch, DXVK, DXMT, and vkd3d
+          smoke verification passed.
+          EOF
+
+          release_assets=(
+            dist/konyak-macos-wine-runtime-stack.tar.zst
+            dist/konyak-macos-wine-runtime-stack-source.json
+            dist/konyak-macos-runtime.release.json
+          )
+
+          if gh release view "$KONYAK_RUNTIME_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+            gh release edit "$KONYAK_RUNTIME_RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$KONYAK_RUNTIME_RELEASE_TITLE" \
+              --notes-file dist/release-notes.md \
+              --latest
+          else
+            gh release create "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$KONYAK_RUNTIME_RELEASE_TITLE" \
+              --notes-file dist/release-notes.md \
+              --latest
+          fi
+
+          if [[ "$DELETE_CANDIDATE" == "true" ]]; then
+            gh release delete "$CANDIDATE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --yes \
+              --cleanup-tag
+          fi

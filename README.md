@@ -117,6 +117,32 @@ dependencies to its own Nix flake.
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
 in this runtime repository.
 
+Final runtime release assets are published only after CI verification. The
+normal `Build runtime` workflow builds artifacts in CI, verifies the assembled
+stack, runs Wine32-on-64, GUI, DXVK, DXMT, and vkd3d smoke tests, then publishes
+the release.
+
+Local artifacts can also be promoted, but only through the candidate flow. Stage
+the local `dist` directory as a draft/prerelease candidate:
+
+```sh
+nix develop -c zsh -lc \
+  'scripts/stage-runtime-release-candidate.zsh candidate-$(date +%Y%m%d%H%M%S) dist'
+```
+
+The `dist` directory must contain:
+
+- `konyak-macos-wine-runtime-stack.tar.zst`
+- `konyak-macos-wine-runtime-stack-source.json`
+- `konyak-macos-runtime.release.json`
+
+Then dispatch `Promote runtime candidate` with the candidate tag. The workflow
+downloads those candidate assets, recalculates the stack archive SHA-256,
+rewrites the source manifest to the final release URL, runs the same runtime
+smoke gates against the candidate stack, and publishes the final Release only
+after every verification job succeeds. Candidate releases are staging inputs,
+not final release placement.
+
 The x86_64 Wine runtime is built with the CrossOver GPTK/D3DMetal loader hook
 and advertises `"supportsExternalGptkD3DMetal": true` in `build-info.json`.
 The aarch64 Wine build does not expose that hook because CrossOver's GPTK

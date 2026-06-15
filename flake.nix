@@ -80,6 +80,7 @@
             pkgs.bison
             pkgs.flex
             pkgs.git
+            pkgs.gh
             pkgs.jq
             pkgs.meson
             pkgs.ninja
