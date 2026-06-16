@@ -157,6 +157,50 @@ run_wine_with_timeout() {
   fi
 }
 
+launch_wine_smoke() {
+  local label="$1"
+  local command_stdout_path="$2"
+  local command_stderr_path="$3"
+  local command_exit_status_path="$4"
+  shift 4
+
+  rm -f "$command_stdout_path" "$command_stderr_path" "$command_exit_status_path"
+  (
+    set +e
+    "$@" >"$command_stdout_path" 2>"$command_stderr_path"
+    echo "$?" >"$command_exit_status_path"
+  ) &
+  smoke_pid="$!"
+}
+
+wait_for_smoke_exit() {
+  local label="$1"
+  local command_stdout_path="$2"
+  local command_stderr_path="$3"
+  local command_exit_status_path="$4"
+  local exit_code
+
+  if [[ -n "$smoke_pid" ]]; then
+    wait "$smoke_pid" 2>/dev/null || true
+    smoke_pid=""
+  fi
+
+  if [[ ! -f "$command_exit_status_path" ]]; then
+    echo "GUI launch smoke $label did not record an exit status." >&2
+    print_runtime_diagnostics
+    exit 75
+  fi
+
+  exit_code="$(cat "$command_exit_status_path")"
+  if (( exit_code != 0 )); then
+    echo "GUI launch smoke $label exited with code $exit_code." >&2
+    print_log_excerpt "stdout" "$command_stdout_path"
+    print_log_excerpt "stderr" "$command_stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+}
+
 wait_for_sentinel() {
   local deadline
   deadline=$((SECONDS + timeout_seconds))
@@ -174,6 +218,37 @@ wait_for_sentinel() {
     print_runtime_diagnostics
     exit 65
   fi
+}
+
+wait_for_active_wine_window() {
+  local expected_title="$1"
+  local deadline
+  local front_pid
+
+  deadline=$((SECONDS + timeout_seconds))
+  while true; do
+    front_pid="$(/usr/bin/osascript - "$expected_title" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set expectedTitle to item 1 of argv
+  tell application "System Events"
+    set candidateProcess to first process whose frontmost is true
+    if name of candidateProcess is not "wine" then error "Wine is not frontmost"
+    return unix id of candidateProcess
+  end tell
+end run
+APPLESCRIPT
+)"
+    if [[ -n "$front_pid" ]]; then
+      return
+    fi
+
+    if (( SECONDS >= deadline )); then
+      echo "GUI launch smoke window did not become active/frontmost after ${timeout_seconds}s." >&2
+      print_runtime_diagnostics
+      exit 75
+    fi
+    sleep 1
+  done
 }
 
 stop_smoke_processes() {
@@ -224,6 +299,7 @@ export WINEDLLPATH="${(j/:/)wine_dll_paths}"
 export WINELOADER="$wine_executable"
 export WINESERVER="$wineserver_executable"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+export KONYAK_GUI_LAUNCH_PROBE_HOLD_MS=8000
 unset WINEDLLOVERRIDES
 unset DYLD_FALLBACK_LIBRARY_PATH
 
@@ -236,7 +312,7 @@ run_wine_with_timeout \
 
 "$wineserver_executable" -w >/dev/null 2>&1 || true
 
-run_wine_with_timeout \
+launch_wine_smoke \
   "start /unix GUI launch" \
   "$stdout_path" \
   "$stderr_path" \
@@ -244,6 +320,12 @@ run_wine_with_timeout \
   "$wine_executable" start /unix "$probe_path"
 
 wait_for_sentinel
+wait_for_active_wine_window "Konyak GUI Launch Probe"
+wait_for_smoke_exit \
+  "start /unix GUI launch" \
+  "$stdout_path" \
+  "$stderr_path" \
+  "$exit_status_path"
 "$wineserver_executable" -w >/dev/null 2>&1 || true
 
 echo "GUI launch smoke OK: $runtime_root"

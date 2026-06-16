@@ -142,6 +142,21 @@ stdenv.mkDerivation {
         perl -0pi -e 's/\n    <key>LSUIElement<\/key>\n    <string>1<\/string>\n//g' \
           loader/wine_info.plist.in
 
+        # NSApplication activation APIs can report success on modern macOS while
+        # leaving Wine inactive when it was started through Konyak's CLI path.
+        # Fall back to the legacy Process Manager foreground call from inside
+        # the Wine app process; unlike an external NSRunningApplication activate
+        # call, this was dynamically verified to make the Wine PID frontmost.
+        substituteInPlace dlls/winemac.drv/cocoa_app.m \
+          --replace-fail '#import "cocoa_icon_utils.h"' '#import "cocoa_icon_utils.h"
+    #import <ApplicationServices/ApplicationServices.h>'
+        perl -0pi -e 's/bool macdrv_err_on;\n/bool macdrv_err_on;\n\nstatic void konyak_set_front_process(void)\n{\n    ProcessSerialNumber psn = { 0, kCurrentProcess };\n    SetFrontProcessWithOptions(&psn, kSetFrontProcessFrontWindowOnly);\n}\n/' \
+          dlls/winemac.drv/cocoa_app.m
+        perl -0pi -e 's/(\s*\[NSApp activateIgnoringOtherApps:ignore\];\n)(\s*return;)/$1            if (ignore) konyak_set_front_process();\n$2/' \
+          dlls/winemac.drv/cocoa_app.m
+        perl -0pi -e 's/(\s*\[NSApp activate\];\n)(\s*\})/$1        konyak_set_front_process();\n$2/' \
+          dlls/winemac.drv/cocoa_app.m
+
         # CrossOver renames each Unix-side Wine child to a temporary
         # $TMPDIR/winetemp/.../<windows-exe>.exe hard link whenever WINEDLLPATH
         # is present. That works when CrossOver.app owns the launch flow, but in

@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 
+#include <stdlib.h>
 #include <windows.h>
+#include <wchar.h>
 
 static const wchar_t *kClassName = L"KonyakGuiLaunchProbeWindow";
 static const wchar_t *kSentinelPath = L"C:\\konyak-gui-launch-smoke-ok.txt";
@@ -52,6 +54,24 @@ static int write_sentinel(void) {
   return write_ok && bytes_written == sizeof(kSentinel) - 1 ? 0 : 1;
 }
 
+static DWORD hold_milliseconds(void) {
+  wchar_t buffer[32];
+  wchar_t *end = NULL;
+  const DWORD length = GetEnvironmentVariableW(
+      L"KONYAK_GUI_LAUNCH_PROBE_HOLD_MS",
+      buffer,
+      (DWORD)(sizeof(buffer) / sizeof(buffer[0])));
+  if (length == 0 || length >= sizeof(buffer) / sizeof(buffer[0])) {
+    return 1500;
+  }
+
+  const unsigned long parsed = wcstoul(buffer, &end, 10);
+  if (end == buffer || parsed > 60000UL) {
+    return 1500;
+  }
+  return (DWORD)parsed;
+}
+
 int WINAPI wWinMain(
     HINSTANCE instance,
     HINSTANCE previous_instance,
@@ -92,7 +112,7 @@ int WINAPI wWinMain(
   UpdateWindow(window);
 
   const int write_status = write_sentinel();
-  const DWORD deadline = GetTickCount() + 1500;
+  const DWORD deadline = GetTickCount() + hold_milliseconds();
   while (GetTickCount() < deadline) {
     MSG message;
     while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
