@@ -375,8 +375,14 @@ jobs:
           fi
 
           if [[ "$DELETE_CANDIDATE" == "true" ]]; then
-            gh release delete "$CANDIDATE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --yes \
-              --cleanup-tag
+            if gh release view "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release delete "$CANDIDATE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --yes
+            fi
+
+            gh api \
+              --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/git/refs/tags/${CANDIDATE_TAG}" \
+              >/dev/null 2>&1 || true
           fi
