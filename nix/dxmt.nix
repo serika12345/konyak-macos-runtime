@@ -266,6 +266,12 @@ EOF
     }
 
     rewrite_dxmt_nix_dylib_references "$out/x86_64-unix/winemetal.so"
+    # Wine resolves a builtin PE module's Unix sidecar from the PE DLL's
+    # directory, so DXMT's winemetal.so must also be beside winemetal.dll.
+    find "$out/x86_64-unix" -maxdepth 1 -type f -print |
+      while IFS= read -r unix_sidecar_path; do
+        cp -Lf "$unix_sidecar_path" "$out/x86_64-windows/$(basename "$unix_sidecar_path")"
+      done
 
     remaining_nix_dylib_references="$(find_dxmt_macho_nix_dylib_references)"
     if [ -n "$remaining_nix_dylib_references" ]; then
@@ -309,6 +315,7 @@ EOF
 
     for required in \
       "$out/x86_64-windows/winemetal.dll" \
+      "$out/x86_64-windows/winemetal.so" \
       "$out/x86_64-windows/d3d11.dll" \
       "$out/x86_64-windows/dxgi.dll" \
       "$out/x86_64-windows/d3d10core.dll" \

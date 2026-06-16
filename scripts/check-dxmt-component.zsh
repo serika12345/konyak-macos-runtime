@@ -23,6 +23,7 @@ required_paths=(
   "i386-windows/d3d11.dll"
   "i386-windows/dxgi.dll"
   "i386-windows/d3d10core.dll"
+  "x86_64-windows/winemetal.so"
   "x86_64-unix/winemetal.so"
 )
 
@@ -62,13 +63,18 @@ done
 
 assert_file_kind "x86_64-unix/winemetal.so" "Mach-O 64-bit" \
   "x86_64 Unix DXMT winemetal.so"
+assert_file_kind "x86_64-windows/winemetal.so" "Mach-O 64-bit" \
+  "x86_64 Windows-side DXMT winemetal.so sidecar"
 
 find_macho_nix_dylib_references() {
+  local scan_dir
   local candidate_path
   local relative_path
   local file_output
 
-  find "$component_root/x86_64-unix" -type f -print |
+  for scan_dir in "$component_root/x86_64-unix" "$component_root/x86_64-windows"; do
+    find "$scan_dir" -type f -print
+  done |
     while IFS= read -r candidate_path; do
       file_output="$(/usr/bin/file "$candidate_path")"
       if [[ "$file_output" != *"Mach-O"* ]]; then

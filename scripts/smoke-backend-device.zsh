@@ -65,6 +65,7 @@ case "$backend" in
       "$runtime_root/lib/dxmt/x86_64-windows/dxgi.dll"
       "$runtime_root/lib/dxmt/x86_64-windows/d3d11.dll"
       "$runtime_root/lib/dxmt/x86_64-windows/winemetal.dll"
+      "$runtime_root/lib/dxmt/x86_64-windows/winemetal.so"
       "$runtime_root/lib/dxmt/x86_64-unix/winemetal.so"
       "$runtime_root/lib/libMoltenVK.dylib"
     )
@@ -175,6 +176,7 @@ print_runtime_diagnostics() {
     "$runtime_root/lib/dxmt/x86_64-windows/d3d11.dll" \
     "$runtime_root/lib/dxmt/x86_64-windows/dxgi.dll" \
     "$runtime_root/lib/dxmt/x86_64-windows/winemetal.dll" \
+    "$runtime_root/lib/dxmt/x86_64-windows/winemetal.so" \
     "$runtime_root/lib/dxmt/x86_64-unix/winemetal.so" \
     "$runtime_root/lib/wine/x86_64-windows/libvkd3d-1.dll"
   do
