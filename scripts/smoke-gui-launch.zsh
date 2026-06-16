@@ -18,7 +18,7 @@ if [[ ! -d "$runtime_root" ]]; then
 fi
 
 runtime_root="$(cd "$runtime_root" && pwd -P)"
-wine_executable="$runtime_root/bin/wine64"
+wine_executable="$runtime_root/bin/wineloader"
 wineserver_executable="$runtime_root/bin/wineserver"
 prefix_init_executable="$runtime_root/lib/wine/x86_64-windows/cmd.exe"
 probe_path="$probe_dir/gui_launch_probe.exe"
@@ -86,12 +86,14 @@ print_runtime_diagnostics() {
   echo "runtime_root=$runtime_root" >&2
   echo "probe_path=$probe_path" >&2
   echo "WINEPREFIX=$WINEPREFIX" >&2
+  echo "WINELOADER=$WINELOADER" >&2
+  echo "WINESERVER=$WINESERVER" >&2
   echo "WINEDLLPATH=$WINEDLLPATH" >&2
   echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >&2
   echo "DYLD_FALLBACK_LIBRARY_PATH=${DYLD_FALLBACK_LIBRARY_PATH:-}" >&2
   for diagnostic_path in \
     "$probe_path" \
-    "$runtime_root/bin/wine64" \
+    "$runtime_root/bin/wineloader" \
     "$runtime_root/bin/wine" \
     "$runtime_root/lib/wine/x86_64-windows/cmd.exe" \
     "$runtime_root/lib/wine/x86_64-windows/kernel32.dll" \
@@ -219,6 +221,8 @@ export GST_REGISTRY="$work_root/gstreamer-registry.bin"
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-0}"
 export WINEDATADIR="$runtime_root/share/wine"
 export WINEDLLPATH="${(j/:/)wine_dll_paths}"
+export WINELOADER="$wine_executable"
+export WINESERVER="$wineserver_executable"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 unset WINEDLLOVERRIDES
 unset DYLD_FALLBACK_LIBRARY_PATH

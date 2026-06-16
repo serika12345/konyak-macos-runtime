@@ -28,7 +28,7 @@ normal-Wine-compatibility repair.
 ```text
 runtime/
   bin/wine
-  bin/wine64
+  bin/wineloader
   lib/wine/i386-windows/...
   lib/wine/x86_64-windows/...
   lib/wine/x86_64-unix/...
@@ -128,7 +128,7 @@ Wine runtime or unrelated components.
       GStreamer.
 - [x] Keep assembled runtime launch smoke for 32-bit `cmd.exe`.
 - [x] Keep assembled runtime GUI launch smoke for the normal
-      `wine64 start /unix <program>` path.
+      `wineloader start /unix <program>` path.
 - [x] Add headless Windows probe executables built with mingw inside the
       runtime submodule.
       - [x] D3D11 device smoke for DXVK.
@@ -136,8 +136,9 @@ Wine runtime or unrelated components.
       - [x] D3D12 device smoke for vkd3d.
       - [x] Win32 GUI launch smoke sentinel probe.
 - [x] Add backend smoke runner scripts that create a temporary `WINEPREFIX`,
-      apply backend-specific `WINEDLLPATH` and `WINEDLLOVERRIDES`, enforce a
-      timeout, and print diagnostics on failure.
+      launch probes from the selected runtime backend directory, apply
+      backend-specific `WINEDLLPATH`, `WINEPATH`, and `WINEDLLOVERRIDES`,
+      enforce a timeout, and print diagnostics on failure.
 - [x] Add runtime Actions jobs for each backend smoke after artifact assembly:
       `smoke-dxvk-d3d11`, `smoke-dxmt-d3d11`, and `smoke-vkd3d-d3d12`.
 - [ ] Add MoltenVK/Vulkan smoke after the Direct3D backend probes are stable.

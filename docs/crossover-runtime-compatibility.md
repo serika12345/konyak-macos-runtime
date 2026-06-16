@@ -260,7 +260,7 @@ real GUI executable path, not only backend probes or prefix initialization.
 Phase 3 is implemented for the current CrossOver-derived runtime:
 
 - The parent Konyak CLI still launches macOS programs through
-  `wine64 start /unix <program>`.
+  `wineloader start /unix <program>`.
 - A Win32 GUI probe now exercises that same launch shape from the assembled
   stack. It creates a visible window, writes a sentinel file inside the prefix,
   and fails with diagnostics if prefix initialization, `start /unix`, or
@@ -290,7 +290,7 @@ introduced by the combined Wine and component closure:
   Darwin alias after component extraction.
 
 Local Actions-equivalent verification completed for the assembled stack layout,
-direct `libgnutls.30.dylib` loading, `wine64 start /unix` GUI launch,
+direct `libgnutls.30.dylib` loading, `wineloader start /unix` GUI launch,
 Wine32-on-64 launch, and the DXVK, DXMT, and vkd3d backend smoke probes.
 
 ## Non-goals
@@ -298,5 +298,5 @@ Wine32-on-64 launch, and the DXVK, DXMT, and vkd3d backend smoke probes.
 - Do not adopt bottle overwrites as Konyak's normal backend selection model.
 - Do not merge user-imported GPTK/D3DMetal payloads into the base Wine archive.
 - Do not weaken tests, lints, or runtime checks to pass packaging smoke.
-- Do not treat a successful `wine64 --version` as proof that dlopen-facing
+- Do not treat a successful `wineloader --version` as proof that dlopen-facing
   runtime libraries are correctly packaged.

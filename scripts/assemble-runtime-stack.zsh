@@ -96,21 +96,6 @@ write_runtime_stack_manifest() {
     }' >"$runtime_root/.konyak-runtime-stack.json"
 }
 
-ensure_wine64_alias() {
-  if [[ -e "$runtime_root/bin/wine64" ]]; then
-    return
-  fi
-  if [[ ! -e "$runtime_root/bin/wine" ]]; then
-    echo "Cannot create wine64 alias because bin/wine is missing." >&2
-    exit 65
-  fi
-
-  (
-    cd "$runtime_root/bin"
-    ln -s wine wine64
-  )
-}
-
 iconv_guard_dir="$(mktemp -d)"
 trap 'rm -rf "$iconv_guard_dir"' EXIT
 
@@ -257,7 +242,6 @@ done
 restore_root_iconv_runtime
 patch_root_darwin_iconv_dependents
 write_runtime_stack_manifest
-ensure_wine64_alias
 
 echo "Runtime stack assembled: $runtime_root"
 

@@ -8,10 +8,15 @@ if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
   exit 64
 fi
 
+hosted_directory_name="Konyak Wine Hosted Application"
+
 required_paths=(
   "bin/wine"
-  "bin/wine64"
+  "bin/wineloader"
   "bin/wineserver"
+  "$hosted_directory_name/wine"
+  "$hosted_directory_name/wineloader"
+  "$hosted_directory_name/wineserver"
   "lib/wine/i386-windows/cmd.exe"
   "lib/wine/i386-windows/kernel32.dll"
   "lib/wine/i386-windows/ntdll.dll"
@@ -31,6 +36,19 @@ host_unix_loader_candidates=(
   "lib/wine/x86_64-unix/wine"
   "lib/wine/aarch64-unix/wine"
 )
+
+if [[ ! -L "$runtime_root/bin" ]]; then
+  echo "runtime/bin must be a symlink to $hosted_directory_name." >&2
+  exit 65
+fi
+
+bin_target="$(readlink "$runtime_root/bin")"
+if [[ "$bin_target" != "$hosted_directory_name" ]]; then
+  echo "runtime/bin points at an unexpected target." >&2
+  echo "expected: $hosted_directory_name" >&2
+  echo "actual:   $bin_target" >&2
+  exit 65
+fi
 
 for relative_path in "${required_paths[@]}"; do
   if [[ ! -e "$runtime_root/$relative_path" ]]; then
@@ -104,6 +122,12 @@ assert_file_kind "lib/wine/x86_64-windows/wow64win.dll" "PE32+ executable" \
   "x86_64 Windows wow64win.dll"
 assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
   "host Unix ntdll.so"
+assert_file_kind "bin/wine" "Mach-O 64-bit" \
+  "hosted Wine loader stub"
+assert_file_kind "bin/wineloader" "Mach-O 64-bit" \
+  "hosted Wine loader"
+assert_file_kind "bin/wineserver" "Mach-O 64-bit" \
+  "hosted Wine server"
 
 assert_glob_match() {
   setopt local_options null_glob
@@ -240,6 +264,23 @@ assert_macho_has_rpath "$host_unix_dir/kerberos.so" "@loader_path/../../"
 assert_macho_has_rpath "$host_unix_dir/opencl.so" "@loader_path/../../"
 assert_macho_has_rpath "$host_unix_dir/wineusb.so" "@loader_path/../../"
 assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
+assert_macho_uses_only_system_dependencies "bin/wine"
+assert_macho_uses_only_system_dependencies "bin/wineloader"
+
+assert_macho_signed() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+
+  if ! codesign --verify "$target_path" >/dev/null 2>&1; then
+    echo "$relative_path is not signed or has an invalid signature." >&2
+    exit 65
+  fi
+}
+
+assert_macho_signed "bin/wineloader"
+assert_macho_signed "bin/wine"
+assert_macho_signed "bin/wineserver"
+assert_macho_signed "$host_unix_loader_path"
 
 find_macho_nix_references() {
   local scan_root
@@ -247,7 +288,9 @@ find_macho_nix_references() {
   local relative_path
   local file_output
 
-  for scan_root in "$runtime_root/bin" "$runtime_root/lib"; do
+  for scan_root in \
+    "$runtime_root/$hosted_directory_name" \
+    "$runtime_root/lib"; do
     if [[ ! -d "$scan_root" ]]; then
       continue
     fi

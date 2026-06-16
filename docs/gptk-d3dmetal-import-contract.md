@@ -76,6 +76,7 @@ CX_APPLEGPTK_LIBD3DSHARED_PATH=<runtime>/components/gptk-d3dmetal/lib/external/l
 DYLD_FRAMEWORK_PATH=<runtime>/components/gptk-d3dmetal/lib/external
 DYLD_LIBRARY_PATH=<runtime>/components/gptk-d3dmetal/lib/external:<runtime>/components/gptk-d3dmetal/lib/wine/x86_64-unix:<runtime library paths>
 WINEDLLPATH=<runtime>/components/gptk-d3dmetal/lib/wine/x86_64-windows:<base Wine DLL paths>
+WINEPATH=Z:\path\to\runtime\components\gptk-d3dmetal\lib\wine\x86_64-windows
 WINEDLLOVERRIDES=dxgi,d3d11,d3d12,nvapi64,nvngx=n,b
 D3DM_SUPPORT_DXR=1
 ```

@@ -77,14 +77,15 @@ Release builds verify Wine32-on-64 in two stages:
 
 Release builds also run backend smoke probes against an assembled runtime stack.
 These probes build small x86_64 Windows executables with mingw, initialize a
-temporary Wine prefix, apply the same backend DLL placement and
-`WINEDLLOVERRIDES` expected after Konyak `set-runtime-settings`, and verify
-DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device creation. They check runtime
+temporary Wine prefix, copy only the probe executable into the selected runtime
+backend directory, apply backend-specific `WINEDLLPATH`, `WINEPATH`, and
+`WINEDLLOVERRIDES`, and verify DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device
+creation without copying backend DLLs into the prefix. They check runtime
 behavior rather than binary identity with CrossOver.
 
 Release builds also run a GUI launch smoke against the assembled runtime stack
-through `wine64 start /unix <program>`, matching Konyak's normal macOS `.exe`
-launch path. The launch smoke uses the runtime `lib` directory through
+through `wineloader start /unix <program>`, matching Konyak's normal macOS
+`.exe` launch path. The launch smoke uses the runtime `lib` directory through
 `DYLD_LIBRARY_PATH` and does not rely on `DYLD_FALLBACK_LIBRARY_PATH`.
 
 DXVK-macOS is packaged independently from GPTK/D3DMetal. The pinned Gcenx
