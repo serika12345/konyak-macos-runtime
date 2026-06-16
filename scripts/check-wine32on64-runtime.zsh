@@ -9,6 +9,15 @@ if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
 fi
 
 hosted_directory_name="Konyak Wine Hosted Application"
+expected_loader_bundle_identifier="app.konyak.Konyak.WineLoader"
+expected_wineserver_bundle_identifier="app.konyak.Konyak.WineServer"
+required_wine_entitlements=(
+  "com.apple.security.cs.allow-unsigned-executable-memory"
+  "com.apple.security.cs.disable-executable-page-protection"
+  "com.apple.security.cs.disable-library-validation"
+  "com.apple.security.device.audio-input"
+  "com.apple.security.device.camera"
+)
 
 required_paths=(
   "bin/wine"
@@ -277,10 +286,129 @@ assert_macho_signed() {
   fi
 }
 
+assert_macho_signature_identity() {
+  local relative_path="$1"
+  local expected_identifier="$2"
+  local target_path="$runtime_root/$relative_path"
+  local signature_details
+
+  signature_details="$(codesign -dv "$target_path" 2>&1)"
+
+  if [[ "$signature_details" != *"Identifier=$expected_identifier"* ]]; then
+    echo "$relative_path has an unexpected code-signing identifier." >&2
+    echo "expected: $expected_identifier" >&2
+    echo "$signature_details" >&2
+    exit 65
+  fi
+
+  if [[ "$signature_details" == *"linker-signed"* ]]; then
+    echo "$relative_path must be explicitly signed, not linker-signed." >&2
+    echo "$signature_details" >&2
+    exit 65
+  fi
+
+  if ! grep -E 'flags=0x[0-9a-fA-F]+\([^)]*runtime[^)]*\)' <<<"$signature_details" >/dev/null; then
+    echo "$relative_path is not signed with the hardened runtime option." >&2
+    echo "$signature_details" >&2
+    exit 65
+  fi
+}
+
+assert_macho_entitlements() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local entitlements
+  local entitlement_key
+
+  entitlements="$(codesign -d --entitlements :- "$target_path" 2>/dev/null || true)"
+  for entitlement_key in "${required_wine_entitlements[@]}"; do
+    if [[ "$entitlements" != *"<key>$entitlement_key</key>"* ]]; then
+      echo "$relative_path is missing required Wine entitlement: $entitlement_key" >&2
+      echo "$entitlements" >&2
+      exit 65
+    fi
+  done
+}
+
+assert_macho_bound_info_plist() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local signature_details
+
+  signature_details="$(codesign -dv "$target_path" 2>&1)"
+  if [[ "$signature_details" != *"Info.plist entries="* ]]; then
+    echo "$relative_path must bind its embedded Info.plist into the code signature." >&2
+    echo "$signature_details" >&2
+    exit 65
+  fi
+}
+
+assert_macho_embedded_info_plist_identity() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local embedded_strings
+
+  embedded_strings="$(strings "$target_path")"
+  if [[ "$embedded_strings" != *"$expected_loader_bundle_identifier"* ]]; then
+    echo "$relative_path embedded Info.plist does not contain Konyak's Wine loader bundle identifier." >&2
+    exit 65
+  fi
+  if [[ "$embedded_strings" != *"$hosted_directory_name"* ]]; then
+    echo "$relative_path embedded Info.plist does not contain Konyak's hosted application name." >&2
+    exit 65
+  fi
+  if [[ "$embedded_strings" == *"com.codeweavers.CrossOver.wineloader"* ||
+        "$embedded_strings" == *"CrossOver-Hosted Application"* ]]; then
+    echo "$relative_path embedded Info.plist still contains CrossOver application identity." >&2
+    exit 65
+  fi
+}
+
+assert_no_crossover_identity_strings() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local embedded_strings
+
+  embedded_strings="$(strings "$target_path")"
+  if [[ "$embedded_strings" == *"com.codeweavers.CrossOver.wineloader"* ||
+        "$embedded_strings" == *"CrossOver-Hosted Application"* ]]; then
+    echo "$relative_path still contains CrossOver application identity strings." >&2
+    exit 65
+  fi
+}
+
+assert_no_winedllpath_temp_loader_rename() {
+  local relative_path="$1"
+  local target_path="$runtime_root/$relative_path"
+  local embedded_strings
+
+  embedded_strings="$(strings "$target_path")"
+  if [[ "$embedded_strings" == *"winetemp-"* ||
+        "$embedded_strings" == *"WINEPRELOADERAPPNAME"* ]]; then
+    echo "$relative_path still contains CrossOver's WINEDLLPATH temp loader rename path." >&2
+    exit 65
+  fi
+}
+
 assert_macho_signed "bin/wineloader"
 assert_macho_signed "bin/wine"
 assert_macho_signed "bin/wineserver"
 assert_macho_signed "$host_unix_loader_path"
+assert_macho_signature_identity "bin/wineloader" "$expected_loader_bundle_identifier"
+assert_macho_signature_identity "bin/wine" "$expected_loader_bundle_identifier"
+assert_macho_signature_identity "bin/wineserver" "$expected_wineserver_bundle_identifier"
+assert_macho_signature_identity "$host_unix_loader_path" "$expected_loader_bundle_identifier"
+assert_macho_entitlements "bin/wineloader"
+assert_macho_entitlements "bin/wine"
+assert_macho_entitlements "bin/wineserver"
+assert_macho_entitlements "$host_unix_loader_path"
+assert_no_crossover_identity_strings "bin/wineloader"
+assert_no_crossover_identity_strings "bin/wine"
+assert_no_crossover_identity_strings "bin/wineserver"
+assert_no_crossover_identity_strings "$host_unix_loader_path"
+assert_macho_bound_info_plist "$host_unix_loader_path"
+assert_macho_embedded_info_plist_identity "$host_unix_loader_path"
+assert_no_winedllpath_temp_loader_rename "$host_unix_dir/ntdll.so"
 
 find_macho_nix_references() {
   local scan_root

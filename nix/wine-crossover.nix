@@ -39,6 +39,9 @@
 let
   supportsExternalGptkD3DMetal = stdenv.hostPlatform.isDarwin && stdenv.hostPlatform.isx86_64;
   wineUnixArch = "${stdenv.hostPlatform.parsed.cpu.name}-unix";
+  hostedApplicationName = "Konyak Wine Hosted Application";
+  wineLoaderBundleIdentifier = "app.konyak.Konyak.WineLoader";
+  wineServerBundleIdentifier = "app.konyak.Konyak.WineServer";
   wine32On64RequiredPaths = [
     "lib/wine/i386-windows/ntdll.dll"
     "lib/wine/x86_64-windows/wow64.dll"
@@ -126,6 +129,33 @@ stdenv.mkDerivation {
 
   preConfigure = ''
         export MACOSX_DEPLOYMENT_TARGET=14.0
+
+        # Wine embeds loader/wine_info.plist into the Unix host loader that
+        # winemac turns into the Cocoa application process. Keep that identity
+        # Konyak-owned so AppKit can associate Wine windows with this runtime
+        # instead of an unbound or CrossOver-owned application identity.
+        substituteInPlace loader/wine_info.plist.in \
+          --replace-fail '<string>com.codeweavers.CrossOver.wineloader</string><!-- CrossOver Hack 10913 -->' \
+            '<string>${wineLoaderBundleIdentifier}</string>' \
+          --replace-fail '<string>CrossOver-Hosted Application</string><!-- CrossOver Hack 10913 -->' \
+            '<string>${hostedApplicationName}</string>'
+        perl -0pi -e 's/\n    <key>LSUIElement<\/key>\n    <string>1<\/string>\n//g' \
+          loader/wine_info.plist.in
+
+        # CrossOver renames each Unix-side Wine child to a temporary
+        # $TMPDIR/winetemp/.../<windows-exe>.exe hard link whenever WINEDLLPATH
+        # is present. That works when CrossOver.app owns the launch flow, but in
+        # Konyak it leaves Wine windows registered as unbundled Windows exe
+        # pseudo-apps and they cannot reliably become the active macOS app.
+        # Keep WINEDLLPATH for DXVK/DXMT/D3DMetal DLL resolution, but preserve
+        # the real Wine loader path for macOS activation.
+        perl -0pi -e 's/    if \(getenv\("WINEDLLPATH"\)\)\n\s*replace_wineloader_path_with_link\( &\(argv\[1\]\), image_path \);/    (void)image_path;/' \
+          dlls/ntdll/unix/loader.c
+        if grep -F 'replace_wineloader_path_with_link( &(argv[1]), image_path );' \
+          dlls/ntdll/unix/loader.c >/dev/null; then
+          echo "Failed to disable CrossOver WINEDLLPATH temp loader rename." >&2
+          exit 1
+        fi
 
         # DXMT's upstream cross file links with mingw ld.bfd. Wine's PE static
         # libraries default to lld-link /lib archives, which expose symbols to nm
@@ -871,7 +901,7 @@ stdenv.mkDerivation {
         }
 
         create_hosted_runtime_layout() {
-          local hosted_name="Konyak Wine Hosted Application"
+          local hosted_name="${hostedApplicationName}"
           local hosted_dir="$out/$hosted_name"
           local original_bin="$out/.konyak-original-bin"
           local host_loader
@@ -905,37 +935,6 @@ stdenv.mkDerivation {
           ln -s "$hosted_name" "$out/bin"
         }
 
-        sign_macho() {
-          local target_path="$1"
-          local file_output
-
-          file_output="$(/usr/bin/file "$target_path")"
-          case "$file_output" in
-            *Mach-O*) ;;
-            *)
-              echo "Cannot sign non-Mach-O file: ''${target_path#$out/}" >&2
-              echo "$file_output" >&2
-              exit 1
-              ;;
-          esac
-
-          chmod u+w "$target_path"
-          /usr/bin/codesign --force --sign - --timestamp=none "$target_path"
-          /usr/bin/codesign --verify "$target_path"
-        }
-
-        sign_runtime_entrypoints() {
-          local loader_path
-
-          sign_macho "$out/Konyak Wine Hosted Application/wine"
-          sign_macho "$out/Konyak Wine Hosted Application/wineloader"
-          sign_macho "$out/Konyak Wine Hosted Application/wineserver"
-          find "$out/lib/wine" -path '*/wine' -type f -print |
-            while IFS= read -r loader_path; do
-              sign_macho "$loader_path"
-            done
-        }
-
         normalize_runtime_machos
         # The first pass may copy new dylib closure files into $out/lib while
         # rewriting Wine modules. Re-run normalization so those newly copied dylibs
@@ -958,7 +957,6 @@ stdenv.mkDerivation {
         fi
 
         create_hosted_runtime_layout
-        sign_runtime_entrypoints
 
         mkdir -p "$out/Licenses"
         cp COPYING.LIB "$out/Licenses/Wine-LGPL-2.1-or-later.txt"
@@ -1035,6 +1033,69 @@ stdenv.mkDerivation {
       }
     }
     EOF
+  '';
+
+  postFixup = ''
+        write_codesign_entitlements() {
+          local entitlements_path="$1"
+
+          cat >"$entitlements_path" <<'EOF'
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+      <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+      <true/>
+      <key>com.apple.security.cs.disable-executable-page-protection</key>
+      <true/>
+      <key>com.apple.security.cs.disable-library-validation</key>
+      <true/>
+      <key>com.apple.security.device.audio-input</key>
+      <true/>
+      <key>com.apple.security.device.camera</key>
+      <true/>
+    </dict>
+    </plist>
+    EOF
+        }
+
+        sign_macho() {
+          local target_path="$1"
+          local signing_identifier="$2"
+          local file_output
+
+          file_output="$(/usr/bin/file "$target_path")"
+          case "$file_output" in
+            *Mach-O*) ;;
+            *)
+              echo "Cannot sign non-Mach-O file: ''${target_path#$out/}" >&2
+              echo "$file_output" >&2
+              exit 1
+              ;;
+          esac
+
+          chmod u+w "$target_path"
+          /usr/bin/codesign \
+            --force \
+            --sign - \
+            --timestamp=none \
+            --options runtime \
+            --entitlements "$codesign_entitlements_path" \
+            --identifier "$signing_identifier" \
+            "$target_path"
+          /usr/bin/codesign --verify --strict "$target_path"
+        }
+
+        codesign_entitlements_path="$(mktemp "''${TMPDIR:-/tmp}/konyak-wine-entitlements.XXXXXXXXXX.plist")"
+        write_codesign_entitlements "$codesign_entitlements_path"
+
+        sign_macho "$out/${hostedApplicationName}/wine" "${wineLoaderBundleIdentifier}"
+        sign_macho "$out/${hostedApplicationName}/wineloader" "${wineLoaderBundleIdentifier}"
+        sign_macho "$out/${hostedApplicationName}/wineserver" "${wineServerBundleIdentifier}"
+        find "$out/lib/wine" -path '*/wine' -type f -print |
+          while IFS= read -r loader_path; do
+            sign_macho "$loader_path" "${wineLoaderBundleIdentifier}"
+          done
   '';
 
   meta = {
