@@ -61,9 +61,15 @@ stdenv.mkDerivation {
 
   sourceRoot = "sources/wine";
 
+  # gettext/libiconv setup hooks add global -lintl/-liconv on Darwin. Those
+  # flags leak through winegcc into PE DLL links, where mingw cannot satisfy
+  # libintl. Let Wine's configure checks add target-specific libraries instead.
+  dontAddExtraLibs = true;
+
   nativeBuildInputs = [
     bison
     flex
+    gettext
     llvmPackages.lld
     llvmPackages.llvm
     perl
@@ -78,7 +84,6 @@ stdenv.mkDerivation {
   buildInputs = [
     cups
     ffmpeg-headless
-    gettext
     freetype
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
@@ -139,8 +144,20 @@ stdenv.mkDerivation {
             '<string>${wineLoaderBundleIdentifier}</string>' \
           --replace-fail '<string>CrossOver-Hosted Application</string><!-- CrossOver Hack 10913 -->' \
             '<string>${hostedApplicationName}</string>'
-        perl -0pi -e 's/\n    <key>LSUIElement<\/key>\n    <string>1<\/string>\n//g' \
-          loader/wine_info.plist.in
+        # Keep CrossOver's LSUIElement startup policy. winemac starts as a UI
+        # element, then the first activatable Wine window calls
+        # transformProcessToForeground:YES, which switches to a regular app and
+        # activates it. Starting as regular bypasses that activation path.
+        #
+        # Konyak's hosted runtime moves tools/wine into the hosted application
+        # directory and exposes it as bin/wine and bin/wineloader. That binary is
+        # the actual AppKit-registered launcher for Konyak, so it needs the same
+        # embedded Info.plist as loader/wine; otherwise codesign has no bound
+        # plist and macOS sees it as an unbundled CLI tool.
+        substituteInPlace tools/wine/Makefile.in \
+          --replace-fail 'wine_EXTRADEFS = -DBINDIR="\"''${bindir}\"" -DLIBDIR="\"''${libdir}\""' 'wine_EXTRADEFS = -DBINDIR="\"''${bindir}\"" -DLIBDIR="\"''${libdir}\""
+wine_DEPS = ../../loader/wine_info.plist
+wine_LDFLAGS = -Wl,-segalign,0x1000,-pagezero_size,0x1000,-sectcreate,__TEXT,__info_plist,loader/wine_info.plist'
 
         # NSApplication activation APIs can report success on modern macOS while
         # leaving Wine inactive when it was started through Konyak's CLI path.
@@ -156,14 +173,23 @@ stdenv.mkDerivation {
           dlls/winemac.drv/cocoa_app.m
         perl -0pi -e 's/(\s*\[NSApp activate\];\n)(\s*\})/$1        konyak_set_front_process();\n$2/' \
           dlls/winemac.drv/cocoa_app.m
+        substituteInPlace dlls/winemac.drv/cocoa_window.m \
+          --replace-fail '#import <QuartzCore/QuartzCore.h>' '#import <QuartzCore/QuartzCore.h>
+    #import <ApplicationServices/ApplicationServices.h>'
+        perl -0pi -e 's/(static WineWindow\* causing_becomeKeyWindow;\n)/$1\nstatic void konyak_set_front_process(void)\n{\n    ProcessSerialNumber psn = { 0, kCurrentProcess };\n    SetFrontProcessWithOptions(&psn, kSetFrontProcessFrontWindowOnly);\n}\n/' \
+          dlls/winemac.drv/cocoa_window.m
+        perl -0pi -e 's/(\s*\[self orderFront:nil\];\n)/$1                if (!self.preventsAppActivation && ![NSApp isActive]) konyak_set_front_process();\n/' \
+          dlls/winemac.drv/cocoa_window.m
 
         # CrossOver renames each Unix-side Wine child to a temporary
         # $TMPDIR/winetemp/.../<windows-exe>.exe hard link whenever WINEDLLPATH
-        # is present. That works when CrossOver.app owns the launch flow, but in
-        # Konyak it leaves Wine windows registered as unbundled Windows exe
-        # pseudo-apps and they cannot reliably become the active macOS app.
-        # Keep WINEDLLPATH for DXVK/DXMT/D3DMetal DLL resolution, but preserve
-        # the real Wine loader path for macOS activation.
+        # is present. That works only under CrossOver's app-managed launch
+        # contract. Konyak launches Wine directly from its own app/CLI runtime,
+        # and dynamic NSRunningApplication/CGWindowList probes show those temp
+        # links register as standalone Windows-exe pseudo-apps that do not
+        # reliably become frontmost. Keep WINEDLLPATH for DXVK, DXMT,
+        # D3DMetal, vkd3d, and Wine DLL resolution, but preserve the real Wine
+        # loader path for macOS activation.
         perl -0pi -e 's/    if \(getenv\("WINEDLLPATH"\)\)\n\s*replace_wineloader_path_with_link\( &\(argv\[1\]\), image_path \);/    (void)image_path;/' \
           dlls/ntdll/unix/loader.c
         if grep -F 'replace_wineloader_path_with_link( &(argv[1]), image_path );' \

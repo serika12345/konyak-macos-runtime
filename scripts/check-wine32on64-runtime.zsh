@@ -71,30 +71,26 @@ if [[ -e "$runtime_root/lib/wine/i386-unix/ntdll.so" ]]; then
   exit 65
 fi
 
-host_unix_ntdll_path=""
+host_unix_ntdll_paths=()
 for candidate_path in "${host_unix_ntdll_candidates[@]}"; do
   if [[ -e "$runtime_root/$candidate_path" ]]; then
-    host_unix_ntdll_path="$candidate_path"
-    break
+    host_unix_ntdll_paths+=("$candidate_path")
   fi
 done
 
-if [[ -z "$host_unix_ntdll_path" ]]; then
+if (( ${#host_unix_ntdll_paths[@]} == 0 )); then
   echo "Missing Wine32-on-64 host Unix ntdll path: ${host_unix_ntdll_candidates[*]}" >&2
   exit 65
 fi
 
-host_unix_dir="${host_unix_ntdll_path%/ntdll.so}"
-
-host_unix_loader_path=""
+host_unix_loader_paths=()
 for candidate_path in "${host_unix_loader_candidates[@]}"; do
   if [[ -e "$runtime_root/$candidate_path" ]]; then
-    host_unix_loader_path="$candidate_path"
-    break
+    host_unix_loader_paths+=("$candidate_path")
   fi
 done
 
-if [[ -z "$host_unix_loader_path" ]]; then
+if (( ${#host_unix_loader_paths[@]} == 0 )); then
   echo "Missing Wine32-on-64 host Unix loader path: ${host_unix_loader_candidates[*]}" >&2
   exit 65
 fi
@@ -129,8 +125,10 @@ assert_file_kind "lib/wine/x86_64-windows/wow64cpu.dll" "PE32+ executable" \
   "x86_64 Windows wow64cpu.dll"
 assert_file_kind "lib/wine/x86_64-windows/wow64win.dll" "PE32+ executable" \
   "x86_64 Windows wow64win.dll"
-assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
-  "host Unix ntdll.so"
+for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
+  assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
+    "host Unix ntdll.so"
+done
 assert_file_kind "bin/wine" "Mach-O 64-bit" \
   "hosted Wine loader stub"
 assert_file_kind "bin/wineloader" "Mach-O 64-bit" \
@@ -267,12 +265,17 @@ assert_macho_rejects_dependency "lib/libidn2.0.dylib" "@loader_path/libiconv.2.d
 assert_macho_uses_dependency "lib/libintl.8.dylib" "@loader_path/libiconv-darwin.2.dylib"
 assert_macho_rejects_dependency "lib/libintl.8.dylib" "@loader_path/libiconv.2.dylib"
 
-assert_macho_has_rpath "$host_unix_dir/secur32.so" "@loader_path/../../"
-assert_macho_has_rpath "$host_unix_dir/bcrypt.so" "@loader_path/../../"
-assert_macho_has_rpath "$host_unix_dir/kerberos.so" "@loader_path/../../"
-assert_macho_has_rpath "$host_unix_dir/opencl.so" "@loader_path/../../"
-assert_macho_has_rpath "$host_unix_dir/wineusb.so" "@loader_path/../../"
-assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
+for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
+  host_unix_dir="${host_unix_ntdll_path%/ntdll.so}"
+  assert_macho_has_rpath "$host_unix_dir/secur32.so" "@loader_path/../../"
+  assert_macho_has_rpath "$host_unix_dir/bcrypt.so" "@loader_path/../../"
+  assert_macho_has_rpath "$host_unix_dir/kerberos.so" "@loader_path/../../"
+  assert_macho_has_rpath "$host_unix_dir/opencl.so" "@loader_path/../../"
+  assert_macho_has_rpath "$host_unix_dir/wineusb.so" "@loader_path/../../"
+done
+for host_unix_loader_path in "${host_unix_loader_paths[@]}"; do
+  assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
+done
 assert_macho_uses_only_system_dependencies "bin/wine"
 assert_macho_uses_only_system_dependencies "bin/wineloader"
 
@@ -357,6 +360,10 @@ assert_macho_embedded_info_plist_identity() {
     echo "$relative_path embedded Info.plist does not contain Konyak's hosted application name." >&2
     exit 65
   fi
+  if [[ "$embedded_strings" != *"LSUIElement"* || "$embedded_strings" != *"<string>1</string>"* ]]; then
+    echo "$relative_path embedded Info.plist does not keep CrossOver's LSUIElement startup policy." >&2
+    exit 65
+  fi
   if [[ "$embedded_strings" == *"com.codeweavers.CrossOver.wineloader"* ||
         "$embedded_strings" == *"CrossOver-Hosted Application"* ]]; then
     echo "$relative_path embedded Info.plist still contains CrossOver application identity." >&2
@@ -393,22 +400,32 @@ assert_no_winedllpath_temp_loader_rename() {
 assert_macho_signed "bin/wineloader"
 assert_macho_signed "bin/wine"
 assert_macho_signed "bin/wineserver"
-assert_macho_signed "$host_unix_loader_path"
 assert_macho_signature_identity "bin/wineloader" "$expected_loader_bundle_identifier"
 assert_macho_signature_identity "bin/wine" "$expected_loader_bundle_identifier"
 assert_macho_signature_identity "bin/wineserver" "$expected_wineserver_bundle_identifier"
-assert_macho_signature_identity "$host_unix_loader_path" "$expected_loader_bundle_identifier"
 assert_macho_entitlements "bin/wineloader"
 assert_macho_entitlements "bin/wine"
 assert_macho_entitlements "bin/wineserver"
-assert_macho_entitlements "$host_unix_loader_path"
 assert_no_crossover_identity_strings "bin/wineloader"
 assert_no_crossover_identity_strings "bin/wine"
 assert_no_crossover_identity_strings "bin/wineserver"
-assert_no_crossover_identity_strings "$host_unix_loader_path"
-assert_macho_bound_info_plist "$host_unix_loader_path"
-assert_macho_embedded_info_plist_identity "$host_unix_loader_path"
-assert_no_winedllpath_temp_loader_rename "$host_unix_dir/ntdll.so"
+assert_macho_bound_info_plist "bin/wineloader"
+assert_macho_bound_info_plist "bin/wine"
+assert_macho_embedded_info_plist_identity "bin/wineloader"
+assert_macho_embedded_info_plist_identity "bin/wine"
+
+for host_unix_loader_path in "${host_unix_loader_paths[@]}"; do
+  assert_macho_signed "$host_unix_loader_path"
+  assert_macho_signature_identity "$host_unix_loader_path" "$expected_loader_bundle_identifier"
+  assert_macho_entitlements "$host_unix_loader_path"
+  assert_no_crossover_identity_strings "$host_unix_loader_path"
+  assert_macho_bound_info_plist "$host_unix_loader_path"
+  assert_macho_embedded_info_plist_identity "$host_unix_loader_path"
+done
+
+for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
+  assert_no_winedllpath_temp_loader_rename "$host_unix_ntdll_path"
+done
 
 find_macho_nix_references() {
   local scan_root

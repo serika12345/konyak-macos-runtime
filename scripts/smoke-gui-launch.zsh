@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 runtime_root="${1:-}"
 probe_dir="${2:-$repo_root/.dart_tool/backend-probes}"
 timeout_seconds="${KONYAK_GUI_LAUNCH_SMOKE_TIMEOUT_SECONDS:-180}"
+wineserver_wait_timeout_seconds="${KONYAK_GUI_LAUNCH_SMOKE_WINESERVER_WAIT_TIMEOUT_SECONDS:-30}"
 sentinel="KONYAK_GUI_LAUNCH_SMOKE_OK"
 
 if [[ -z "$runtime_root" ]]; then
@@ -68,7 +69,9 @@ prefix_init_stdout_path="$work_root/prefix-init-stdout.log"
 prefix_init_stderr_path="$work_root/prefix-init-stderr.log"
 prefix_init_exit_status_path="$work_root/prefix-init-exit-status"
 sentinel_path="$prefix/drive_c/konyak-gui-launch-smoke-ok.txt"
+active_seen_path="$work_root/active-seen"
 smoke_pid=""
+active_poll_pid=""
 
 print_log_excerpt() {
   local label="$1"
@@ -201,6 +204,53 @@ wait_for_smoke_exit() {
   fi
 }
 
+wait_for_wineserver_idle_best_effort() {
+  local label="$1"
+  local command_stdout_path="$2"
+  local command_stderr_path="$3"
+  local command_exit_status_path="$4"
+  local wait_pid
+  local deadline
+  local exit_code
+  local termination_attempt
+
+  rm -f "$command_stdout_path" "$command_stderr_path" "$command_exit_status_path"
+  "$wineserver_executable" -w >"$command_stdout_path" 2>"$command_stderr_path" &
+  wait_pid="$!"
+
+  deadline=$((SECONDS + wineserver_wait_timeout_seconds))
+  while kill -0 "$wait_pid" 2>/dev/null; do
+    if (( SECONDS >= deadline )); then
+      echo "GUI launch smoke $label did not observe wineserver idle after ${wineserver_wait_timeout_seconds}s; continuing." >&2
+      kill -TERM "$wait_pid" 2>/dev/null || true
+      for termination_attempt in {1..10}; do
+        if ! kill -0 "$wait_pid" 2>/dev/null; then
+          break
+        fi
+        sleep 0.5
+      done
+      if kill -0 "$wait_pid" 2>/dev/null; then
+        kill -KILL "$wait_pid" 2>/dev/null || true
+      fi
+      wait "$wait_pid" 2>/dev/null || true
+      return
+    fi
+    sleep 1
+  done
+
+  if wait "$wait_pid" 2>/dev/null; then
+    exit_code=0
+  else
+    exit_code="$?"
+  fi
+  echo "$exit_code" >"$command_exit_status_path"
+  if (( exit_code != 0 )); then
+    echo "GUI launch smoke $label wineserver wait exited with code $exit_code; continuing." >&2
+    print_log_excerpt "$label stdout" "$command_stdout_path"
+    print_log_excerpt "$label stderr" "$command_stderr_path"
+  fi
+}
+
 wait_for_sentinel() {
   local deadline
   deadline=$((SECONDS + timeout_seconds))
@@ -223,25 +273,9 @@ wait_for_sentinel() {
 wait_for_active_wine_window() {
   local expected_title="$1"
   local deadline
-  local front_pid
 
   deadline=$((SECONDS + timeout_seconds))
-  while true; do
-    front_pid="$(/usr/bin/osascript - "$expected_title" <<'APPLESCRIPT' 2>/dev/null || true
-on run argv
-  set expectedTitle to item 1 of argv
-  tell application "System Events"
-    set candidateProcess to first process whose frontmost is true
-    if name of candidateProcess is not "wine" then error "Wine is not frontmost"
-    return unix id of candidateProcess
-  end tell
-end run
-APPLESCRIPT
-)"
-    if [[ -n "$front_pid" ]]; then
-      return
-    fi
-
+  while [[ ! -s "$active_seen_path" ]]; do
     if (( SECONDS >= deadline )); then
       echo "GUI launch smoke window did not become active/frontmost after ${timeout_seconds}s." >&2
       print_runtime_diagnostics
@@ -251,7 +285,49 @@ APPLESCRIPT
   done
 }
 
+start_active_wine_window_poll() {
+  local expected_title="$1"
+
+  rm -f "$active_seen_path"
+  (
+    set +e
+    while [[ ! -s "$active_seen_path" ]]; do
+      /usr/bin/osascript - "$expected_title" <<'APPLESCRIPT' >"$active_seen_path.tmp" 2>/dev/null
+on run argv
+  set expectedTitle to item 1 of argv
+  tell application "System Events"
+    repeat with candidateProcess in processes
+      try
+        if frontmost of candidateProcess then
+          repeat with candidateWindow in windows of candidateProcess
+            if name of candidateWindow contains expectedTitle then
+              return (name of candidateProcess) & ":" & (unix id of candidateProcess)
+            end if
+          end repeat
+        end if
+      end try
+    end repeat
+    error "Expected Wine window is not frontmost"
+  end tell
+end run
+APPLESCRIPT
+      if [[ -s "$active_seen_path.tmp" ]]; then
+        mv -f "$active_seen_path.tmp" "$active_seen_path"
+        exit 0
+      fi
+      rm -f "$active_seen_path.tmp"
+      sleep 0.1
+    done
+    rm -f "$active_seen_path.tmp"
+  ) &
+  active_poll_pid="$!"
+}
+
 stop_smoke_processes() {
+  if [[ -n "$active_poll_pid" ]] && kill -0 "$active_poll_pid" 2>/dev/null; then
+    kill -TERM "$active_poll_pid" 2>/dev/null || true
+  fi
+
   if [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; then
     kill -TERM "$smoke_pid" 2>/dev/null || true
     sleep 2
@@ -299,7 +375,7 @@ export WINEDLLPATH="${(j/:/)wine_dll_paths}"
 export WINELOADER="$wine_executable"
 export WINESERVER="$wineserver_executable"
 export DYLD_LIBRARY_PATH="$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-export KONYAK_GUI_LAUNCH_PROBE_HOLD_MS=8000
+export KONYAK_GUI_LAUNCH_PROBE_HOLD_MS="${KONYAK_GUI_LAUNCH_PROBE_HOLD_MS:-8000}"
 unset WINEDLLOVERRIDES
 unset DYLD_FALLBACK_LIBRARY_PATH
 
@@ -310,8 +386,13 @@ run_wine_with_timeout \
   "$prefix_init_exit_status_path" \
   "$wine_executable" wineboot --init
 
-"$wineserver_executable" -w >/dev/null 2>&1 || true
+wait_for_wineserver_idle_best_effort \
+  "post-prefix-initialization" \
+  "$work_root/wineserver-prefix-stdout.log" \
+  "$work_root/wineserver-prefix-stderr.log" \
+  "$work_root/wineserver-prefix-exit-status"
 
+start_active_wine_window_poll "Konyak GUI Launch Probe"
 launch_wine_smoke \
   "start /unix GUI launch" \
   "$stdout_path" \
@@ -326,6 +407,10 @@ wait_for_smoke_exit \
   "$stdout_path" \
   "$stderr_path" \
   "$exit_status_path"
-"$wineserver_executable" -w >/dev/null 2>&1 || true
+wait_for_wineserver_idle_best_effort \
+  "post-gui-launch" \
+  "$work_root/wineserver-gui-stdout.log" \
+  "$work_root/wineserver-gui-stderr.log" \
+  "$work_root/wineserver-gui-exit-status"
 
 echo "GUI launch smoke OK: $runtime_root"
