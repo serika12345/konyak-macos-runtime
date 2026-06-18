@@ -331,6 +331,9 @@ run_wine_with_timeout() {
       accept_gptk_unsupported_host
     fi
     if (( SECONDS >= deadline )); then
+      if is_allowed_gptk_unsupported_host; then
+        accept_gptk_unsupported_host
+      fi
       echo "Backend smoke $label timed out after ${timeout_seconds}s." >&2
       print_log_excerpt "stdout" "$command_stdout_path"
       print_log_excerpt "stderr" "$command_stderr_path"
@@ -345,6 +348,9 @@ run_wine_with_timeout() {
   exit_code="$(cat "$command_exit_status_path")"
 
   if (( exit_code != 0 )); then
+    if is_allowed_gptk_unsupported_host; then
+      accept_gptk_unsupported_host
+    fi
     echo "Backend smoke $label exited with code $exit_code." >&2
     print_log_excerpt "stdout" "$command_stdout_path"
     print_log_excerpt "stderr" "$command_stderr_path"

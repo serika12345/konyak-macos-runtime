@@ -727,8 +727,8 @@ jobs:
           nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "nix shell nixpkgs#gnutar -c ./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
-          KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
-          KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"
+          nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
+          nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"
 
   publish-release:
     name: Publish runtime release
