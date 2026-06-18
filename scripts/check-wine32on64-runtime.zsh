@@ -129,6 +129,15 @@ for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
   assert_file_kind "$host_unix_ntdll_path" "Mach-O 64-bit" \
     "host Unix ntdll.so"
 done
+if [[ -e "$runtime_root/lib/wine/x86_64-unix/ntdll.so" ]]; then
+  if [[ ! -e "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so" ]]; then
+    echo "Missing Konyak GPTK/D3DMetal loader shim: lib/wine/x86_64-unix/cxcompatdb.so" >&2
+    exit 65
+  fi
+  assert_file_kind "lib/wine/x86_64-unix/cxcompatdb.so" \
+    "Mach-O 64-bit dynamically linked shared library x86_64" \
+    "Konyak GPTK/D3DMetal loader shim"
+fi
 assert_file_kind "bin/wine" "Mach-O 64-bit" \
   "hosted Wine loader stub"
 assert_file_kind "bin/wineloader" "Mach-O 64-bit" \
@@ -273,6 +282,10 @@ for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
   assert_macho_has_rpath "$host_unix_dir/opencl.so" "@loader_path/../../"
   assert_macho_has_rpath "$host_unix_dir/wineusb.so" "@loader_path/../../"
 done
+if [[ -e "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so" ]]; then
+  assert_macho_has_rpath "lib/wine/x86_64-unix/cxcompatdb.so" "@loader_path/"
+  assert_macho_uses_dependency "lib/wine/x86_64-unix/cxcompatdb.so" "@rpath/ntdll.so"
+fi
 for host_unix_loader_path in "${host_unix_loader_paths[@]}"; do
   assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
 done

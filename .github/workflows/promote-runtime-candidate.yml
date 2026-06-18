@@ -88,11 +88,7 @@ jobs:
           ' candidate/konyak-macos-runtime.release.json >/dev/null
 
           jq -e '
-            .schemaVersion == 1 and
-            .runtimeId == "konyak-macos-wine" and
-            .stackId == "macos-konyak-runtime-stack" and
-            (.components | type) == "array" and
-            ([.components[].id] | contains([
+            [
               "wine",
               "dxvk-macos",
               "moltenvk",
@@ -103,7 +99,13 @@ jobs:
               "winetricks",
               "vkd3d",
               "dxmt"
-            ]))
+            ] as $allowed
+            | .schemaVersion == 1 and
+              .runtimeId == "konyak-macos-wine" and
+              .stackId == "macos-konyak-runtime-stack" and
+              (.components | type) == "array" and
+              all(.components[]; type == "object") and
+              ([.components[].id] | sort) == ($allowed | sort)
           ' candidate/konyak-macos-wine-runtime-stack-source.json >/dev/null
 
           stack_sha="$(sha256sum candidate/konyak-macos-wine-runtime-stack.tar.zst | awk '{ print $1 }')"
@@ -118,6 +120,16 @@ jobs:
             '.components |= map(.archiveUrl = $stack_url | .sha256 = $stack_sha)' \
             candidate/konyak-macos-wine-runtime-stack-source.json \
             > dist/konyak-macos-wine-runtime-stack-source.json
+          forbidden_gptk_entries="$(
+            tar -tf dist/konyak-macos-wine-runtime-stack.tar.zst |
+              grep -E '(^|/)components/gptk-d3dmetal(/|$)|(^|/)lib/external/(D3DMetal\.framework(/|$)|libd3dshared\.dylib$)|(^|/)lib/wine/x86_64-(windows|unix)/(atidxx64|nvapi64|nvngx|nvngx-on-metalfx)\.(dll|so)$' ||
+              true
+          )"
+          if [[ -n "$forbidden_gptk_entries" ]]; then
+            echo "candidate runtime archive must not include GPTK/D3DMetal payload paths:" >&2
+            echo "$forbidden_gptk_entries" >&2
+            exit 65
+          fi
 
           echo "release-tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release-title=Konyak macOS runtime $release_tag" >> "$GITHUB_OUTPUT"
@@ -314,6 +326,46 @@ jobs:
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
 
+  smoke-gptk-d3dmetal:
+    name: Verify GPTK/D3DMetal backend smoke
+    needs: normalize-candidate
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download normalized release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-candidate-release-payload
+          path: dist
+
+      - name: Verify GPTK/D3DMetal backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-gptk-candidate-smoke-runtime"
+          gptk_work_root="$RUNNER_TEMP/konyak-gptk-candidate-smoke-payload"
+          probe_root="$RUNNER_TEMP/konyak-gptk-candidate-backend-probes"
+          rm -rf "$smoke_runtime_root" "$gptk_work_root" "$probe_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"
+
   publish-release:
     name: Publish verified runtime release
     needs:
@@ -323,6 +375,7 @@ jobs:
       - smoke-dxvk-d3d11
       - smoke-dxmt-d3d11
       - smoke-vkd3d-d3d12
+      - smoke-gptk-d3dmetal
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -347,8 +400,8 @@ jobs:
           Konyak macOS runtime ${KONYAK_RUNTIME_RELEASE_TAG}.
 
           This release was promoted by GitHub Actions from candidate ${CANDIDATE_TAG}
-          after runtime layout, Wine32-on-64, GUI launch, DXVK, DXMT, and vkd3d
-          smoke verification passed.
+          after runtime layout, Wine32-on-64, GUI launch, DXVK, DXMT, vkd3d,
+          and CI-only GPTK/D3DMetal smoke verification passed.
           EOF
 
           release_assets=(

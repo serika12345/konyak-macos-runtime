@@ -79,9 +79,12 @@ Release builds also run backend smoke probes against an assembled runtime stack.
 These probes build small x86_64 Windows executables with mingw, initialize a
 temporary Wine prefix, copy only the probe executable into the selected runtime
 backend directory, apply backend-specific `WINEDLLPATH`, `WINEPATH`, and
-`WINEDLLOVERRIDES`, and verify DXVK D3D11, DXMT D3D11, and vkd3d D3D12 device
-creation without copying backend DLLs into the prefix. They check runtime
-behavior rather than binary identity with CrossOver.
+`WINEDLLOVERRIDES`, and verify DXVK D3D11, DXMT D3D11, vkd3d D3D12, and
+GPTK/D3DMetal D3D11/D3D12 device creation without copying backend DLLs into the
+prefix. They check runtime behavior rather than binary identity with CrossOver.
+GPTK/D3DMetal CI smoke downloads the pinned Gcenx Game Porting Toolkit release
+asset into `$RUNNER_TEMP`, verifies its SHA-256, imports it into the unpacked
+smoke runtime only, and never uploads it as a Konyak artifact or release asset.
 
 Release builds also run a GUI launch smoke against the assembled runtime stack
 through `wineloader start /unix <program>`, matching Konyak's normal macOS
@@ -116,12 +119,20 @@ Konyak repository must consume this component archive instead of adding vkd3d
 dependencies to its own Nix flake.
 
 Apple GPTK/D3DMetal remains a user-imported optional layer and is not included
-in this runtime repository.
+in this runtime repository. CI may download the pinned Gcenx release asset only
+for transient GPTK/D3DMetal smoke verification. The downloaded archive, its
+extracted files, and the imported `components/gptk-d3dmetal` directory must not
+be included in `dist/`, uploaded workflow artifacts, release source manifests,
+or final runtime release assets. Maintainers running this CI path are
+responsible for complying with the Apple D3DMetal/GPTK license terms referenced
+by the Gcenx release. Do not add Apple/Gcenx D3DMetal notices to runtime
+`Licenses/` as shipped-component notices unless Konyak actually ships that
+component.
 
 Final runtime release assets are published only after CI verification. The
 normal `Build runtime` workflow builds artifacts in CI, verifies the assembled
-stack, runs Wine32-on-64, GUI, DXVK, DXMT, and vkd3d smoke tests, then publishes
-the release.
+stack, runs Wine32-on-64, GUI, DXVK, DXMT, vkd3d, and CI-only GPTK/D3DMetal
+smoke tests, then publishes the release.
 
 Local artifacts can also be promoted, but only through the candidate flow. Stage
 the local `dist` directory as a draft/prerelease candidate:

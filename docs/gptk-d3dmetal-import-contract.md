@@ -9,6 +9,17 @@ The runtime build verifies that `lib/wine/x86_64-unix/ntdll.so` contains the
 CrossOver loader hook for `CX_APPLEGPTK_LIBD3DSHARED_PATH`. Without that hook,
 importing the payload below is not sufficient.
 
+The x86_64 runtime also ships `lib/wine/x86_64-unix/cxcompatdb.so` as a
+Konyak-owned minimal GPTK/D3DMetal loader shim. CrossOver Wine's public
+`ntdll` loader opens that path during startup, and the shim uses only the
+exported `add_load_order_override` and `prepend_dll_path` hooks. It derives the
+GPTK Wine root from `CX_APPLEGPTK_LIBD3DSHARED_PATH`, sets
+`CX_ACTIVE_GRAPHICS_BACKEND=d3dmetal`, prepends the GPTK Wine root to Wine's
+internal DLL path list, and applies the native D3DMetal load order for
+`dxgi,d3d11,d3d12,nvapi64,nvngx`. It is not CrossOver's proprietary
+compatibility database and must not grow title-specific DB behavior, signature
+checks, process/file patching, or redirect policy.
+
 ## Source Payload
 
 Apple GPTK 3.0 ships the Windows evaluation environment as a nested DMG. The
@@ -25,6 +36,22 @@ redist/
 ```
 
 Import tools must use that `redist` directory as the source payload.
+
+CI may also use the pinned Gcenx Game Porting Toolkit release archive as a
+transient smoke input. That archive contains an application bundle layout; the
+Wine-facing payload used by the CI import script is:
+
+```text
+Game Porting Toolkit.app/Contents/Resources/wine/lib
+```
+
+The Gcenx archive is not a Konyak runtime component. CI must verify the pinned
+archive SHA-256, import it only into an unpacked smoke runtime under a temporary
+work directory, and must not upload the archive, extracted app bundle, imported
+`components/gptk-d3dmetal`, or derived D3DMetal files as workflow artifacts or
+release assets. CI maintainers are responsible for complying with the Apple
+D3DMetal/GPTK license terms referenced by the Gcenx release; Konyak runtime
+`Licenses/` must describe only components shipped by Konyak.
 
 ## Runtime Layout
 

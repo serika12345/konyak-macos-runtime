@@ -8,7 +8,7 @@ probe_dir="${3:-$repo_root/.dart_tool/backend-probes}"
 timeout_seconds="${KONYAK_BACKEND_SMOKE_TIMEOUT_SECONDS:-180}"
 
 if [[ -z "$runtime_root" || -z "$backend" ]]; then
-  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12> [probe-dir]" >&2
+  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
   exit 64
 fi
 
@@ -24,6 +24,7 @@ prefix_init_executable="$runtime_root/lib/wine/x86_64-windows/cmd.exe"
 
 typeset -a dll_path_entries
 typeset -a dyld_path_entries
+typeset -a dyld_framework_path_entries
 typeset -a wine_path_entries
 typeset -a wine_windows_paths
 typeset -a required_paths
@@ -83,6 +84,72 @@ case "$backend" in
       "$runtime_root/lib/wine/x86_64-windows/libvkd3d-shader-1.dll"
       "$runtime_root/lib/wine/x86_64-windows/libvkd3d-utils-1.dll"
       "$runtime_root/lib/libMoltenVK.dylib"
+    )
+    ;;
+  gptk-d3d11-device)
+    probe_name="d3d11_device_probe.exe"
+    probe_runtime_directory="$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    success_marker="KONYAK_D3D11_DEVICE_PROBE_OK"
+    backend_overrides="dxgi,d3d11,d3d12,nvapi64,nvngx=n,b"
+    dll_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    )
+    dyld_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix"
+    )
+    dyld_framework_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+    )
+    required_paths=(
+      "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so"
+    )
+    ;;
+  gptk-d3d12|gptk-d3d12-device)
+    probe_name="d3d12_device_probe.exe"
+    probe_runtime_directory="$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    success_marker="KONYAK_D3D12_DEVICE_PROBE_OK"
+    backend_overrides="dxgi,d3d11,d3d12,nvapi64,nvngx=n,b"
+    dll_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    )
+    dyld_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix"
+    )
+    dyld_framework_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+    )
+    required_paths=(
+      "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so"
     )
     ;;
   *)
@@ -164,7 +231,9 @@ print_runtime_diagnostics() {
   echo "WINEDLLPATH=$WINEDLLPATH" >&2
   print -r -- "WINEPATH=${WINEPATH:-}" >&2
   echo "WINEDLLOVERRIDES=$WINEDLLOVERRIDES" >&2
+  print -r -- "CX_APPLEGPTK_LIBD3DSHARED_PATH=${CX_APPLEGPTK_LIBD3DSHARED_PATH:-}" >&2
   echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" >&2
+  print -r -- "DYLD_FRAMEWORK_PATH=${DYLD_FRAMEWORK_PATH:-}" >&2
   for diagnostic_path in \
     "$probe_path" \
     "$runtime_root/lib/libMoltenVK.dylib" \
@@ -178,7 +247,15 @@ print_runtime_diagnostics() {
     "$runtime_root/lib/dxmt/x86_64-windows/winemetal.dll" \
     "$runtime_root/lib/dxmt/x86_64-windows/winemetal.so" \
     "$runtime_root/lib/dxmt/x86_64-unix/winemetal.so" \
-    "$runtime_root/lib/wine/x86_64-windows/libvkd3d-1.dll"
+    "$runtime_root/lib/wine/x86_64-windows/libvkd3d-1.dll" \
+    "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so" \
+    "$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so" \
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so"
   do
     if [[ -e "$diagnostic_path" ]]; then
       /usr/bin/file "$diagnostic_path" >&2
@@ -313,6 +390,17 @@ fi
 export WINELOADER="$wine_executable"
 export WINESERVER="$wineserver_executable"
 export DYLD_LIBRARY_PATH="${(j/:/)dyld_path_entries}${dyld_path_entries:+:}$runtime_root/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+if (( ${#dyld_framework_path_entries[@]} > 0 )); then
+  export DYLD_FRAMEWORK_PATH="${(j/:/)dyld_framework_path_entries}${DYLD_FRAMEWORK_PATH:+:$DYLD_FRAMEWORK_PATH}"
+else
+  unset DYLD_FRAMEWORK_PATH
+fi
+if [[ "$backend" == gptk-* ]]; then
+  export CX_APPLEGPTK_LIBD3DSHARED_PATH="$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib"
+  export D3DM_SUPPORT_DXR="${D3DM_SUPPORT_DXR:-1}"
+else
+  unset CX_APPLEGPTK_LIBD3DSHARED_PATH
+fi
 unset DYLD_FALLBACK_LIBRARY_PATH
 
 run_wine_with_timeout \

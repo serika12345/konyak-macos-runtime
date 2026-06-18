@@ -523,6 +523,25 @@ wine_LDFLAGS = -Wl,-segalign,0x1000,-pagezero_size,0x1000,-sectcreate,__TEXT,__i
             fi
           done
 
+          "$CC" \
+            -dynamiclib \
+            -O2 \
+            -Wall \
+            -Wextra \
+            -Werror \
+            -o "$out/lib/wine/${wineUnixArch}/cxcompatdb.so" \
+            ${../shims/cxcompatdb/cxcompatdb.c} \
+            "$out/lib/wine/${wineUnixArch}/ntdll.so" \
+            -Wl,-install_name,@rpath/cxcompatdb.so \
+            -Wl,-rpath,@loader_path/
+
+          if ! otool -L "$out/lib/wine/${wineUnixArch}/cxcompatdb.so" |
+            awk 'NR > 1 { print $1 }' |
+            grep -Fx '@rpath/ntdll.so' >/dev/null; then
+            echo "Konyak GPTK/D3DMetal loader shim is not linked against @rpath/ntdll.so." >&2
+            exit 1
+          fi
+
           mkdir -p "$out/lib/external"
         fi
 

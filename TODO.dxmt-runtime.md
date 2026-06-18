@@ -112,6 +112,11 @@ runtime/
       `components/gptk-d3dmetal`, and macOS runtime reinstall/update preserves
       and migrates the user-provided component instead of replacing it with the
       base Wine payload.
+- [x] Add a Konyak-owned minimal GPTK/D3DMetal loader shim at
+      `lib/wine/x86_64-unix/cxcompatdb.so`. The shim uses only CrossOver Wine's
+      public `ntdll` exports to prepend the user-imported GPTK Wine root and
+      set the native D3DMetal load order. It does not implement CrossOver's
+      proprietary compatibility database or title-specific patch behavior.
 - [ ] Add backend enum support in Konyak CLI/UI:
       `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
 - [x] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and
@@ -142,10 +147,15 @@ Wine runtime or unrelated components.
 - [x] Add runtime Actions jobs for each backend smoke after artifact assembly:
       `smoke-dxvk-d3d11`, `smoke-dxmt-d3d11`, and `smoke-vkd3d-d3d12`.
 - [ ] Add MoltenVK/Vulkan smoke after the Direct3D backend probes are stable.
-- [ ] Keep GPTK/D3DMetal smoke as local/manual workflow coverage because the
-      payload is user-provided and not redistributed by this repository.
-      - [ ] `ntdll.__wine_unix_call` compatibility check.
-      - [ ] GPTK D3D12/DXGI device smoke.
+- [x] Keep GPTK/D3DMetal smoke as CI-only external-payload workflow coverage.
+      The workflows download the pinned Gcenx Game Porting Toolkit release
+      asset into runner-local temporary storage, verify its SHA-256, import it
+      only into the unpacked smoke runtime, and reject runtime release archives
+      that contain GPTK/D3DMetal payload paths.
+      - [x] `ntdll.__wine_unix_call` compatibility exercised through GPTK
+            D3DMetal device smokes.
+      - [x] GPTK D3D11/DXGI device smoke.
+      - [x] GPTK D3D12/DXGI device smoke.
 
 ## Current Known Constraints
 

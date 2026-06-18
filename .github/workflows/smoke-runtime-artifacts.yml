@@ -49,6 +49,7 @@ jobs:
           nix shell nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
@@ -60,3 +61,47 @@ jobs:
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxmt-d3d11"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
+
+  smoke-gptk-d3dmetal:
+    name: Verify GPTK/D3DMetal smoke from artifacts
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime stack artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime-stack
+          path: dist
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify GPTK/D3DMetal backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-gptk-artifact-smoke-runtime"
+          gptk_work_root="$RUNNER_TEMP/konyak-gptk-artifact-smoke-payload"
+          probe_root="$RUNNER_TEMP/konyak-gptk-artifact-backend-probes"
+          rm -rf "$smoke_runtime_root" "$gptk_work_root" "$probe_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"

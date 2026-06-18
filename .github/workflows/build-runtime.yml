@@ -405,6 +405,7 @@ jobs:
           ./scripts/check-dxvk-component.zsh "$runtime_stack_root"
           ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
           ./scripts/check-wine-addons-component.zsh "$runtime_stack_root"
+          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
 
       - name: Upload runtime stack artifact
         uses: actions/upload-artifact@v4
@@ -686,6 +687,49 @@ jobs:
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root vkd3d-d3d12"
 
+  smoke-gptk-d3dmetal:
+    name: Verify GPTK/D3DMetal backend smoke
+    needs: assemble-runtime-stack-artifact
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Enable Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+
+      - name: Install Rosetta
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download runtime stack artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: konyak-macos-wine-runtime-stack
+          path: dist
+
+      - name: Verify GPTK/D3DMetal backend smoke
+        run: |
+          smoke_runtime_root="/tmp/konyak-gptk-d3dmetal-smoke-runtime"
+          gptk_work_root="$RUNNER_TEMP/konyak-gptk-d3dmetal-smoke-payload"
+          probe_root="$RUNNER_TEMP/konyak-gptk-d3dmetal-backend-probes"
+          rm -rf "$smoke_runtime_root" "$gptk_work_root" "$probe_root"
+          mkdir -p "$smoke_runtime_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
+            -C "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
+          ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"
+
   publish-release:
     name: Publish runtime release
     needs:
@@ -697,6 +741,7 @@ jobs:
       - smoke-dxvk-d3d11
       - smoke-dxmt-d3d11
       - smoke-vkd3d-d3d12
+      - smoke-gptk-d3dmetal
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30

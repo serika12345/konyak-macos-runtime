@@ -56,6 +56,7 @@ for asset_path in "$release_metadata" "$source_manifest" "$runtime_stack"; do
     exit 66
   fi
 done
+"$repo_root/scripts/check-runtime-archive-excludes-gptk.zsh" "$runtime_stack" >/dev/null
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq not found. Run this script inside nix develop." >&2
@@ -99,7 +100,7 @@ jq -e '
   exit 65
 }
 
-missing_components="$(
+manifest_component_check="$(
   jq -r '
     [
       "wine",
@@ -112,14 +113,21 @@ missing_components="$(
       "winetricks",
       "vkd3d",
       "dxmt"
-    ] as $required
-    | ([.components[] | select(type == "object") | .id] | unique) as $present
-    | ($required - $present)[]
+    ] as $allowed
+    | if all(.components[]; type == "object") then
+        ([.components[].id] | sort) as $present
+        | if $present == ($allowed | sort) then empty else
+            "expected component ids: " + (($allowed | sort) | join(",")) + "\n" +
+            "present component ids: " + ($present | join(","))
+          end
+      else
+        "all component entries must be objects"
+      end
   ' "$source_manifest"
 )"
-if [[ -n "$missing_components" ]]; then
-  echo "source manifest missing required component ids:" >&2
-  echo "$missing_components" >&2
+if [[ -n "$manifest_component_check" ]]; then
+  echo "source manifest component ids do not match the macOS runtime release contract:" >&2
+  echo "$manifest_component_check" >&2
   exit 65
 fi
 
