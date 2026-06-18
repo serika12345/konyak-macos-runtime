@@ -405,7 +405,7 @@ jobs:
           ./scripts/check-dxvk-component.zsh "$runtime_stack_root"
           ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
           ./scripts/check-wine-addons-component.zsh "$runtime_stack_root"
-          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
+          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
 
       - name: Upload runtime stack artifact
         uses: actions/upload-artifact@v4
@@ -724,7 +724,7 @@ jobs:
           nix shell nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
-          nix develop -c zsh -lc "./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst"
+          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"

@@ -13,7 +13,7 @@ archive_path="$1"
 }
 
 if ! tar --version 2>/dev/null | grep -q 'GNU tar'; then
-  echo "GNU tar not found. Run this script inside nix develop." >&2
+  echo "GNU tar not found. Run this script with GNU tar on PATH." >&2
   exit 69
 fi
 
