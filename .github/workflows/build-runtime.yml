@@ -334,6 +334,16 @@ jobs:
             -C "$addon_component_root"
           ./scripts/check-wine-addons-component.zsh "$addon_component_root"
 
+      - name: Verify Winetricks component
+        run: |
+          winetricks_component_root="$RUNNER_TEMP/konyak-winetricks-component"
+          rm -rf "$winetricks_component_root"
+          mkdir -p "$winetricks_component_root"
+          nix shell nixpkgs#gnutar -c tar \
+            -xaf dist/konyak-macos-winetricks.tar.zst \
+            -C "$winetricks_component_root"
+          ./scripts/check-winetricks-component.zsh "$winetricks_component_root"
+
       - name: Upload binary component artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -405,6 +415,7 @@ jobs:
           ./scripts/check-dxvk-component.zsh "$runtime_stack_root"
           ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
           ./scripts/check-wine-addons-component.zsh "$runtime_stack_root"
+          ./scripts/check-winetricks-component.zsh "$runtime_stack_root"
           nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
 
       - name: Upload runtime stack artifact
@@ -532,6 +543,7 @@ jobs:
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
+          ./scripts/check-winetricks-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   smoke-dxvk-d3d11:

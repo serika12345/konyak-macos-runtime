@@ -427,6 +427,17 @@ package_winetricks() {
   mkdir -p "$payload_root"
   cp -f "$script_cache" "$payload_root/winetricks"
   chmod 0755 "$payload_root/winetricks"
+  WINETRICKS_LATEST_VERSION_CHECK=disabled LANG=C \
+    "$payload_root/winetricks" list-all 2>/dev/null |
+    awk 'NF >= 2 { print }' >"$payload_root/verbs.txt"
+  if [[ ! -s "$payload_root/verbs.txt" ]]; then
+    echo "winetricks list-all did not produce a verb catalog." >&2
+    exit 65
+  fi
+  if ! grep -Eq '^win10[[:space:]]+' "$payload_root/verbs.txt"; then
+    echo "winetricks verb catalog does not contain the win10 verb." >&2
+    exit 65
+  fi
   write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "winetricks" "$winetricks_version"
   archive_payload "$payload_root" "$archive_path"
 }

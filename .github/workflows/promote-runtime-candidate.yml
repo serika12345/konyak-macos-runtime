@@ -183,6 +183,7 @@ jobs:
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
           ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
           ./scripts/check-wine-addons-component.zsh "$smoke_runtime_root"
+          ./scripts/check-winetricks-component.zsh "$smoke_runtime_root"
           ./scripts/smoke-wine32on64-launch.zsh "$smoke_runtime_root"
 
   smoke-gui-launch:
