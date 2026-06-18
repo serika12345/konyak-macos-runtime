@@ -274,8 +274,15 @@ print_runtime_diagnostics() {
 log_contains() {
   local path="$1"
   local pattern="$2"
+  local line
 
-  [[ -s "$path" ]] && grep -F "$pattern" "$path" >/dev/null
+  [[ -s "$path" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == *"$pattern"* ]]; then
+      return 0
+    fi
+  done <"$path"
+  return 1
 }
 
 is_allowed_gptk_unsupported_host() {
@@ -469,7 +476,7 @@ run_wine_with_timeout \
   "$exit_status_path" \
   "$wine_executable" "$probe_launch_path"
 
-if ! grep -F "$success_marker" "$stdout_path" >/dev/null; then
+if ! log_contains "$stdout_path" "$success_marker"; then
   echo "Backend smoke did not print the expected marker: $success_marker" >&2
   print_log_excerpt "stdout" "$stdout_path"
   print_log_excerpt "stderr" "$stderr_path"
