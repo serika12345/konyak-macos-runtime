@@ -271,6 +271,37 @@ print_runtime_diagnostics() {
   echo "----- end backend smoke diagnostics -----" >&2
 }
 
+log_contains() {
+  local path="$1"
+  local pattern="$2"
+
+  [[ -s "$path" ]] && grep -F "$pattern" "$path" >/dev/null
+}
+
+is_allowed_gptk_unsupported_host() {
+  local log_path
+
+  [[ "$backend" == gptk-* ]] || return 1
+  [[ "${KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST:-0}" == "1" ]] || return 1
+
+  for log_path in "$stdout_path" "$stderr_path"; do
+    if log_contains "$log_path" "GPU not supported: Apple Paravirtual device" &&
+      log_contains "$log_path" "D3DM: D3DMetal requires Apple silicon and macOS 14.0 Sonoma or higher."; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+accept_gptk_unsupported_host() {
+  echo "Backend smoke $label reached the CI host's unsupported GPTK/D3DMetal GPU signature." >&2
+  echo "Treating this as an unsupported-host pass because KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1." >&2
+  print_log_excerpt "stdout" "$command_stdout_path"
+  print_log_excerpt "stderr" "$command_stderr_path"
+  exit 0
+}
+
 wine_windows_path() {
   local unix_path="$1"
   local windows_path
@@ -296,6 +327,9 @@ run_wine_with_timeout() {
 
   deadline=$((SECONDS + timeout_seconds))
   while [[ ! -f "$command_exit_status_path" ]]; do
+    if is_allowed_gptk_unsupported_host; then
+      accept_gptk_unsupported_host
+    fi
     if (( SECONDS >= deadline )); then
       echo "Backend smoke $label timed out after ${timeout_seconds}s." >&2
       print_log_excerpt "stdout" "$command_stdout_path"

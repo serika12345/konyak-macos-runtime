@@ -153,7 +153,9 @@ Wine runtime or unrelated components.
       only into the unpacked smoke runtime, and reject runtime release archives
       that contain GPTK/D3DMetal payload paths.
       - [x] `ntdll.__wine_unix_call` compatibility exercised through GPTK
-            D3DMetal device smokes.
+            D3DMetal device smokes on supported hosts, with GitHub hosted
+            macOS paravirtual GPU runs accepting only D3DMetal's explicit
+            unsupported-host signature.
       - [x] GPTK D3D11/DXGI device smoke.
       - [x] GPTK D3D12/DXGI device smoke.
 

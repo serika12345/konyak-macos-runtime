@@ -85,6 +85,12 @@ prefix. They check runtime behavior rather than binary identity with CrossOver.
 GPTK/D3DMetal CI smoke downloads the pinned Gcenx Game Porting Toolkit release
 asset into `$RUNNER_TEMP`, verifies its SHA-256, imports it into the unpacked
 smoke runtime only, and never uploads it as a Konyak artifact or release asset.
+GitHub hosted macOS arm64 runners currently expose an Apple Paravirtual GPU
+that D3DMetal rejects. In those CI jobs only,
+`KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1` allows the exact D3DMetal unsupported
+host signature after the import and loader path have been exercised; local
+smoke runs without that flag must still create the requested D3D11/D3D12 device
+and print the probe success marker.
 
 Release builds also run a GUI launch smoke against the assembled runtime stack
 through `wineloader start /unix <program>`, matching Konyak's normal macOS
@@ -132,7 +138,10 @@ component.
 Final runtime release assets are published only after CI verification. The
 normal `Build runtime` workflow builds artifacts in CI, verifies the assembled
 stack, runs Wine32-on-64, GUI, DXVK, DXMT, vkd3d, and CI-only GPTK/D3DMetal
-smoke tests, then publishes the release.
+smoke tests, then publishes the release. The GPTK/D3DMetal CI job verifies the
+pinned external payload import and loader path and either completes the
+D3DMetal device smoke on a supported host or records the explicit hosted-runner
+unsupported GPU signature described above.
 
 Local artifacts can also be promoted, but only through the candidate flow. Stage
 the local `dist` directory as a draft/prerelease candidate:

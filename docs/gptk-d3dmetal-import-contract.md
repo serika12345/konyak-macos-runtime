@@ -53,6 +53,13 @@ release assets. CI maintainers are responsible for complying with the Apple
 D3DMetal/GPTK license terms referenced by the Gcenx release; Konyak runtime
 `Licenses/` must describe only components shipped by Konyak.
 
+GitHub hosted macOS arm64 runners expose an Apple Paravirtual GPU that
+D3DMetal rejects after the GPTK loader path is reached. CI jobs may set
+`KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1` to accept only the exact unsupported-host
+signature emitted by D3DMetal on that hosted runner. Local/manual smoke runs
+must leave that variable unset and must still prove real D3D11/D3D12 device
+creation.
+
 ## Runtime Layout
 
 The `redist` payload must be installed as an isolated optional component while
