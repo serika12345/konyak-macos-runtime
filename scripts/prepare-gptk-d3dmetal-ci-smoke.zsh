@@ -78,6 +78,10 @@ if [[ "$actual_sha256" != "$gptk_archive_sha256" ]]; then
   fail "GPTK/D3DMetal CI archive SHA-256 mismatch: expected $gptk_archive_sha256, got $actual_sha256"
 fi
 
+if ! tar --version 2>/dev/null | grep -q 'GNU tar'; then
+  fail "GNU tar not found. Run this script with GNU tar on PATH." 69
+fi
+
 rm -rf "$extract_root"
 mkdir -p "$extract_root"
 tar --warning=no-unknown-keyword -xaf "$archive_path" -C "$extract_root"
