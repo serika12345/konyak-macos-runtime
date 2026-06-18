@@ -57,7 +57,32 @@
           wineRuntime = wineRuntimeForDxmt;
         };
 
+        packages.gptk-d3dmetal-local-smoke = pkgs.writeShellApplication {
+          name = "gptk-d3dmetal-local-smoke";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.curl
+            pkgs.gawk
+            pkgs.gnugrep
+            pkgs.gnutar
+            pkgs.perl
+            pkgs.pkgsCross.mingwW64.stdenv.cc
+            pkgs.rsync
+            pkgs.zsh
+            pkgs.zstd
+          ];
+          text = ''
+            exec ${pkgs.zsh}/bin/zsh ${self}/scripts/smoke-gptk-d3dmetal-local.zsh "$@"
+          '';
+        };
+
         packages.default = self.packages.${system}.konyak-macos-wine-runtime;
+
+        apps.gptk-d3dmetal-local-smoke = {
+          type = "app";
+          program = "${self.packages.${system}.gptk-d3dmetal-local-smoke}/bin/gptk-d3dmetal-local-smoke";
+          meta.description = "Run the local GPTK/D3DMetal D3D11/D3D12 smoke test against a Konyak macOS runtime";
+        };
 
         checks.fetch-crossover-source = pkgs.runCommand "fetch-crossover-source" { } ''
           cp ${

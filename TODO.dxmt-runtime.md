@@ -158,6 +158,9 @@ Wine runtime or unrelated components.
             unsupported-host signature.
       - [x] GPTK D3D11/DXGI device smoke.
       - [x] GPTK D3D12/DXGI device smoke.
+      - [x] Local `nix run .#gptk-d3dmetal-local-smoke` entry point that copies
+            or extracts a runtime into transient storage, imports the pinned
+            Gcenx payload only into that copy, and runs both GPTK smoke probes.
 
 ## Current Known Constraints
 

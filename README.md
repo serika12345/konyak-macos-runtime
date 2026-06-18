@@ -92,6 +92,25 @@ host signature after the import and loader path have been exercised; local
 smoke runs without that flag must still create the requested D3D11/D3D12 device
 and print the probe success marker.
 
+To run the GPTK/D3DMetal smoke path locally through the flake, pass either an
+assembled runtime root or a runtime stack archive:
+
+```sh
+nix run .#gptk-d3dmetal-local-smoke -- \
+  /path/to/konyak-macos-wine-runtime
+
+nix run .#gptk-d3dmetal-local-smoke -- \
+  --work-root .dart_tool/gptk-d3dmetal-local-smoke \
+  /path/to/konyak-macos-wine-runtime-stack.tar.zst
+```
+
+The local flake app copies or extracts the supplied runtime into a work
+directory, downloads the pinned Gcenx payload into that same transient work
+area, imports it only into the copied runtime, and runs the D3D11 and D3D12
+backend smoke probes. Use `--allow-unsupported-host` only when intentionally
+reproducing the hosted-runner unsupported GPU path; normal local runs should
+leave it unset so they prove real D3DMetal device creation.
+
 Release builds also run a GUI launch smoke against the assembled runtime stack
 through `wineloader start /unix <program>`, matching Konyak's normal macOS
 `.exe` launch path. The launch smoke uses the runtime `lib` directory through
