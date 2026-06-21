@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <windows.h>
 
+static const char kSuccessSentinelPath[] =
+    "C:\\konyak-d3d11-device-probe-ok.txt";
+static const char kSuccessMarker[] =
+    "KONYAK_D3D11_DEVICE_PROBE_OK\n";
+
 typedef HRESULT(WINAPI *D3D11CreateDeviceAndSwapChainProc)(
     IDXGIAdapter *,
     D3D_DRIVER_TYPE,
@@ -31,6 +36,34 @@ static int fail_last_error(const char *operation) {
   const DWORD error = GetLastError();
   fprintf(stderr, "%s failed: %lu\n", operation, (unsigned long)error);
   return 1;
+}
+
+static int write_success_sentinel(void) {
+  HANDLE file = CreateFileA(
+      kSuccessSentinelPath,
+      GENERIC_WRITE,
+      0,
+      NULL,
+      CREATE_ALWAYS,
+      FILE_ATTRIBUTE_NORMAL,
+      NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    return fail_last_error("CreateFileA(success sentinel)");
+  }
+
+  DWORD bytes_written = 0;
+  const DWORD marker_size = (DWORD)(sizeof(kSuccessMarker) - 1);
+  const BOOL write_ok = WriteFile(
+      file,
+      kSuccessMarker,
+      marker_size,
+      &bytes_written,
+      NULL);
+  CloseHandle(file);
+  if (!write_ok || bytes_written != marker_size) {
+    return fail_last_error("WriteFile(success sentinel)");
+  }
+  return 0;
 }
 
 static LRESULT CALLBACK window_proc(
@@ -148,6 +181,7 @@ int main(void) {
   printf(
       "KONYAK_D3D11_DEVICE_PROBE_OK featureLevel=0x%04x\n",
       (unsigned int)created_level);
+  const int sentinel_status = write_success_sentinel();
 
   if (context != NULL) {
     ID3D11DeviceContext_Release(context);
@@ -160,5 +194,5 @@ int main(void) {
   }
   FreeLibrary(d3d11_module);
   DestroyWindow(window);
-  return 0;
+  return sentinel_status;
 }
