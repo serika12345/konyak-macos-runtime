@@ -69,98 +69,31 @@ runtime/
       lib/wine/x86_64-unix/...
 ```
 
-## Implementation Checklist
+## Remaining Work
 
-- [x] Build and package CrossOver-derived Wine in Konyak runtime layout.
-- [x] Add a Wine32-on-64 launch smoke that runs the runtime's 32-bit
-      `cmd.exe` against an assembled Konyak runtime stack.
-- [x] Add a Nix DXMT package that builds locally on macOS before Actions.
-- [x] Require `KONYAK_METAL_TOOLCHAIN_BIN` for DXMT builds because Apple's
-      Metal compiler is delivered by Xcode outside the Nix store.
-- [x] Verify DXMT output contains x86_64 `winemetal.so` plus both x86_64 and
-      i386 `winemetal.dll`, `d3d11.dll`, `dxgi.dll`, and `d3d10core.dll`.
-- [x] Verify DXMT output contains x86_64 NVIDIA shim DLLs `nvapi64.dll` and
-      `nvngx.dll` while keeping the i386 DXMT payload limited to the existing
-      DXMT DLL set.
-- [ ] Add Wine-side DXMT prerequisites if the package requires hidden
-      `winemac.drv` API exports.
-- [x] Publish the default macOS runtime as one assembled stack archive while
-      retaining separate component artifacts inside CI.
-- [x] Keep DXVK packaging independent and usable without GPTK.
-      The current `dxvk-macos` component combines the pinned Gcenx DXVK-macOS
-      DLLs with upstream DXVK `v1.10.3` only for missing `d3d10.dll` and
-      `d3d10_1.dll`, and is checked by `scripts/check-dxvk-component.zsh`.
-- [x] Package GStreamer plugins and `gst-plugin-scanner` with the macOS runtime
-      so Wine media handling does not depend on host GStreamer plugins.
-      The current `gstreamer` component includes representative core,
-      playback/typefind, MP4/WAV, and Apple media plugin dylibs under
-      `lib/gstreamer-1.0`, includes `libexec/gstreamer-1.0/gst-plugin-scanner`,
-      and is checked by `scripts/check-gstreamer-component.zsh`.
-- [x] Align GPTK/D3DMetal NVIDIA shim import with CrossOver 26.1.
-      The import contract now accepts CrossOver.app's `apple_gptk` payload,
-      requires `nvapi64` and canonical `nvngx` files, normalizes older
-      `nvngx-on-metalfx` source names, and keeps GPTK/D3DMetal D3D10 out of
-      the required payload because D3D10 is owned by DXVK/DXMT components.
-- [x] Add CrossOver-derived vkd3d as a runtime component.
-      The component is built from the pinned CrossOver FOSS source archive,
-      reuses the Wine runtime artifact for `widl`, ships both i386 and x86_64
-      `libvkd3d-1.dll`, `libvkd3d-shader-1.dll`, and
-      `libvkd3d-utils-1.dll`, and is checked by
-      `scripts/check-vkd3d-component.zsh`.
-- [x] Change Konyak installer behavior so GPTK import never overwrites
-      `lib/wine/*` directly. User-imported GPTK/D3DMetal now installs under
-      `components/gptk-d3dmetal`, and macOS runtime reinstall/update preserves
-      and migrates the user-provided component instead of replacing it with the
-      base Wine payload.
-- [x] Add a Konyak-owned minimal GPTK/D3DMetal loader shim at
-      `lib/wine/x86_64-unix/cxcompatdb.so`. The shim uses only CrossOver Wine's
-      public `ntdll` exports to prepend the user-imported GPTK Wine root and
-      set the native D3DMetal load order. It does not implement CrossOver's
-      proprietary compatibility database or title-specific patch behavior.
-- [ ] Add backend enum support in Konyak CLI/UI:
-      `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
-- [x] Add backend-specific `WINEDLLPATH`, `WINEDLLOVERRIDES`, and
-      `DYLD_LIBRARY_PATH` generation.
-- [x] Add GitHub Actions only after local Nix DXMT builds pass.
+- Investigate and add Wine-side DXMT prerequisites if the package requires
+  hidden `winemac.drv` API exports.
+- Add backend enum support in the parent Konyak CLI/UI:
+  `wine`, `dxvk`, `dxmt`, `gptkD3DMetal`.
+- Add MoltenVK/Vulkan smoke after the Direct3D backend probes are stable.
 
-## Runtime Smoke CI Checklist
+## Runtime Smoke CI Expectations
 
 These checks care about runtime behavior, not binary identity with CrossOver.
 Keep jobs narrow so a failed backend smoke can be rerun without rebuilding the
 Wine runtime or unrelated components.
 
-- [x] Keep release payload checks for Wine32-on-64, DXVK, DXMT, vkd3d, and
-      GStreamer.
-- [x] Keep assembled runtime launch smoke for 32-bit `cmd.exe`.
-- [x] Keep assembled runtime GUI launch smoke for the normal
-      `wineloader start /unix <program>` path.
-- [x] Add headless Windows probe executables built with mingw inside the
-      runtime submodule.
-      - [x] D3D11 device smoke for DXVK.
-      - [x] D3D11 device smoke for DXMT.
-      - [x] D3D12 device smoke for vkd3d.
-      - [x] Win32 GUI launch smoke sentinel probe.
-- [x] Add backend smoke runner scripts that create a temporary `WINEPREFIX`,
-      launch probes from the selected runtime backend directory, apply
-      backend-specific `WINEDLLPATH`, `WINEPATH`, and `WINEDLLOVERRIDES`,
-      enforce a timeout, and print diagnostics on failure.
-- [x] Add runtime Actions jobs for each backend smoke after artifact assembly:
-      `smoke-dxvk-d3d11`, `smoke-dxmt-d3d11`, and `smoke-vkd3d-d3d12`.
-- [ ] Add MoltenVK/Vulkan smoke after the Direct3D backend probes are stable.
-- [x] Keep GPTK/D3DMetal smoke as CI-only external-payload workflow coverage.
-      The workflows download the pinned Gcenx Game Porting Toolkit release
-      asset into runner-local temporary storage, verify its SHA-256, import it
-      only into the unpacked smoke runtime, and reject runtime release archives
-      that contain GPTK/D3DMetal payload paths.
-      - [x] `ntdll.__wine_unix_call` compatibility exercised through GPTK
-            D3DMetal device smokes on supported hosts, with GitHub hosted
-            macOS paravirtual GPU runs accepting only D3DMetal's explicit
-            unsupported-host signature.
-      - [x] GPTK D3D11/DXGI device smoke.
-      - [x] GPTK D3D12/DXGI device smoke.
-      - [x] Local `nix run .#gptk-d3dmetal-local-smoke` entry point that copies
-            or extracts a runtime into transient storage, imports the pinned
-            Gcenx payload only into that copy, and runs both GPTK smoke probes.
+- Keep release payload checks for Wine32-on-64, DXVK, DXMT, vkd3d, GStreamer,
+  addon payloads, and winetricks.
+- Keep assembled runtime launch smoke for 32-bit `cmd.exe`.
+- Keep assembled runtime GUI launch smoke for the normal
+  `wineloader start /unix <program>` path.
+- Keep backend smoke runners on temporary prefixes and selected runtime backend
+  directories. They must not copy backend DLLs into the prefix.
+- Keep GPTK/D3DMetal smoke as CI-only external-payload workflow coverage. The
+  pinned Gcenx payload may be downloaded only into runner-local temporary
+  storage, imported only into the unpacked smoke runtime, and excluded from
+  release archives and workflow artifacts.
 
 ## Current Known Constraints
 

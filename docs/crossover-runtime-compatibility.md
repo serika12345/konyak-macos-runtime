@@ -35,36 +35,6 @@ nixpkgs Darwin Wine is the compatibility baseline for upstream-style Wine
 feature coverage. It is useful for deciding which feature probes and
 dependencies should be present on Darwin. It is not the D3DMetal baseline.
 
-## Current Diagnosis
-
-The current Konyak CrossOver-derived runtime has the right high-level direction:
-
-- CrossOver-derived Wine is the macOS Wine source.
-- Wine32-on-64 is built with `--enable-archs=i386,x86_64`.
-- Vulkan is enabled.
-- DXVK, DXMT, vkd3d, MoltenVK, GStreamer, FreeType, wine-mono, wine-gecko, and
-  winetricks are built or packaged as explicit runtime stack payloads.
-- GPTK/D3DMetal remains user-imported instead of redistributed.
-
-The current problems are lower-level compatibility and packaging issues:
-
-- The Wine configure flags are too hand-pruned. `--enable-archs=i386,x86_64`,
-  `--with-vulkan`, and `--without-x` are intentional, but every other
-  `--without-*` should be rechecked against nixpkgs Darwin Wine, CrossOver 26.1,
-  and observed source-level constraints.
-- `--with-gnutls` is present, but that only proves Wine was built with GnuTLS
-  support. It does not prove runtime modules can resolve `libgnutls.30.dylib`.
-- Unix-side Wine modules such as `secur32.so` and `bcrypt.so` use runtime
-  loading paths that are not fully represented by `otool -L` checks. A package
-  can pass direct dependency checks while still failing at dlopen time.
-- CI smoke tests must not use search paths that the app does not set. A smoke
-  test that succeeds only because of `DYLD_FALLBACK_LIBRARY_PATH` can hide a
-  broken public runtime.
-
-The Ardour splash-screen stall is consistent with this class of issue:
-Schannel/GnuTLS support exists at build time but fails to initialize because
-`libgnutls.30.dylib` is not available from the runtime layout seen by Wine.
-
 ## Decisions
 
 ### Public Distribution
@@ -155,22 +125,18 @@ The runtime must satisfy all of the following:
 This is the concrete compatibility bar for Schannel/GnuTLS-sensitive
 applications such as Ardour.
 
-## Implementation Order
+## Compatibility Requirements
 
-### Phase 1: Configure Flags
-
-Recheck `runtime/konyak-macos-runtime/nix/wine-crossover.nix` configure flags.
-
-Keep:
+The CrossOver-derived Wine configure flags must stay aligned with normal Darwin
+Wine compatibility. Keep:
 
 - `--enable-archs=i386,x86_64`;
 - `--with-vulkan`;
 - `--without-x`;
 - `--disable-tests`.
 
-Review every other `--without-*`. Remove it unless it is justified by a Darwin
-limitation, a redistributability constraint, or a demonstrated source-level
-problem.
+Every other `--without-*` must be justified by a Darwin limitation, a
+redistributability constraint, or a demonstrated source-level problem.
 
 The adopted compatibility flags are:
 
@@ -198,13 +164,6 @@ The adopted compatibility flags are:
 The runtime submodule has a configure flag check so this set cannot silently
 regress back to hard-pruned `--without-*` flags.
 
-Phase 1 verification completed with a full x86_64-darwin build of
-`konyak-macos-wine-runtime`. The build exposed one concrete packaging detail:
-`libinotify-kqueue` was detected by configure, but its include and library paths
-had to be propagated explicitly through `CPPFLAGS`, `LDFLAGS`,
-`NIX_CFLAGS_COMPILE`, and `NIX_LDFLAGS` for Unix-side modules such as
-`winebus.sys` to compile.
-
 `--with-opengl` is intentionally not in this adopted Darwin set. A full
 x86_64-darwin configure attempt showed that Wine 11 treats an explicit
 `--with-opengl` as a hard requirement for EGL development files. nixpkgs Darwin
@@ -217,13 +176,8 @@ The comparison set is:
 - nixpkgs Darwin `wineWow64Packages.stable` and related full variants;
 - CrossOver 26.1 source and installed runtime layout.
 
-### Phase 2: Dependencies, dylib Layout, and Single Archive
-
-Add the dependencies needed by the enabled probes.
-
-Fix runtime packaging so common dylibs and closure libraries are placed where
-Wine Unix modules can resolve them from the assembled runtime. Extend checks to
-cover:
+Runtime packaging must place common dylibs and closure libraries where Wine Unix
+modules can resolve them from the assembled runtime. Checks must cover:
 
 - direct Mach-O Nix store dylib references;
 - `LC_RPATH` and install-name expectations;
@@ -235,44 +189,13 @@ The public source manifest should point at the single assembled archive for the
 default macOS runtime. Component archives may remain workflow artifacts and
 internal verification inputs.
 
-Phase 2 is implemented for the current CrossOver-derived runtime:
-
-- Wine packaging now places dlopen-facing libraries such as GnuTLS,
-  GSSAPI/Kerberos, OpenCL, and libusb under the runtime shared library root.
-- Wine binaries, Unix modules, and copied dylib closures have local Mach-O
-  install names and `LC_RPATH` entries instead of Nix store loader paths.
-- GStreamer and DXMT component packaging also strips Nix store `LC_RPATH`
-  entries from copied Mach-O payloads and keeps local `@loader_path` lookup.
-- Runtime checks validate direct Nix store dylib references and Nix store
-  `LC_RPATH` entries, including the final assembled stack root.
-- The release source manifest can keep individual component IDs and versions
-  while pointing every component record at one verified stack archive.
-
-Local Actions-equivalent rebuild verification completed for the Wine runtime,
-DXMT, vkd3d, binary components, the assembled stack archive, and the generated
-single-archive source manifest.
-
-### Phase 3: Launch, Smoke, and Sync Behavior
-
-After the runtime layout is fixed, verify normal `.exe` launch behavior using a
-real GUI executable path, not only backend probes or prefix initialization.
-
-Phase 3 is implemented for the current CrossOver-derived runtime:
-
-- The parent Konyak CLI still launches macOS programs through
-  `wineloader start /unix <program>`.
-- A Win32 GUI probe now exercises that same launch shape from the assembled
-  stack. It creates a visible window, writes a sentinel file inside the prefix,
-  and fails with diagnostics if prefix initialization, `start /unix`, or
-  sentinel creation does not complete before the timeout.
-- Runtime smoke scripts no longer set `DYLD_FALLBACK_LIBRARY_PATH`. They use
-  the app-equivalent `DYLD_LIBRARY_PATH` rooted at the assembled runtime's
-  `lib` directory.
-- `msync` and `esync` are mutually exclusive in the parent launch environment:
-  `msync` sets `WINEMSYNC=1`, and `esync` sets `WINEESYNC=1`.
-- The runtime workflow runs GUI launch smoke as a downstream job that downloads
-  the assembled stack artifact. It does not depend on the CrossOver Wine
-  derivation in a way that can rebuild Wine during a smoke rerun.
+Normal `.exe` launch behavior must be verified using a real GUI executable
+path, not only backend probes or prefix initialization. Runtime smoke scripts
+must use the app-equivalent `DYLD_LIBRARY_PATH` rooted at the assembled
+runtime's `lib` directory and must not rely on `DYLD_FALLBACK_LIBRARY_PATH`.
+Runtime workflow smoke jobs must download the assembled stack artifact instead
+of depending on the CrossOver Wine derivation in a way that can rebuild Wine
+during a smoke rerun.
 
 The single assembled stack also preserves the mixed libiconv ABI requirements
 introduced by the combined Wine and component closure:
@@ -288,10 +211,6 @@ introduced by the combined Wine and component closure:
 - Immediate root `bin/*` and `lib/*` Mach-O files that declare the Darwin
   compatibility-version-7 `libiconv.2.dylib` dependency are retargeted to the
   Darwin alias after component extraction.
-
-Local Actions-equivalent verification completed for the assembled stack layout,
-direct `libgnutls.30.dylib` loading, `wineloader start /unix` GUI launch,
-Wine32-on-64 launch, and the DXVK, DXMT, and vkd3d backend smoke probes.
 
 ## Non-goals
 
