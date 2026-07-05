@@ -56,9 +56,9 @@ D3DMetal/GPTK license terms referenced by the Gcenx release; Konyak runtime
 GitHub hosted macOS arm64 runners expose an Apple Paravirtual GPU that
 D3DMetal rejects after the GPTK loader path is reached. CI jobs may set
 `KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1` to accept only the exact unsupported-host
-signature emitted by D3DMetal on that hosted runner. Local/manual smoke runs
-must leave that variable unset and must still prove real D3D11/D3D12 device
-creation.
+signature emitted by D3DMetal on that hosted runner. D3D10 smoke proves that
+base Wine D3D10 reaches the GPTK D3D11/DXGI bridge; D3D11/D3D12 smoke must
+still prove real device creation when that variable is unset.
 
 ## Runtime Layout
 
@@ -90,6 +90,12 @@ components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so -> ../../external/libd3ds
 components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so -> ../../external/libd3dshared.dylib
 components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so -> ../../external/libd3dshared.dylib
 ```
+
+Do not install Apple GPTK `d3d10.dll` or `d3d10.so` into the active
+`components/gptk-d3dmetal` layout. CrossOver's shipped GPTK layout does not
+override D3D10; D3D10 must continue to use the base Wine builtin frontend and
+then reach the selected native D3D11/DXGI backend through Wine's normal D3D10
+bridge.
 
 Do not copy those symlinks as independent Mach-O files. The D3DMetal component
 must be kept across base runtime reinstall/update operations. Legacy imports

@@ -18,6 +18,15 @@ mkdir -p "$output_dir"
   -Wextra \
   -Werror \
   -O2 \
+  "$repo_root/probes/windows/d3d10_device_probe.c" \
+  -o "$output_dir/d3d10_device_probe.exe"
+
+"$compiler" \
+  -std=c11 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -O2 \
   "$repo_root/probes/windows/d3d11_device_probe.c" \
   -o "$output_dir/d3d11_device_probe.exe"
 

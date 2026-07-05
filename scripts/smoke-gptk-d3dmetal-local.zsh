@@ -7,9 +7,9 @@ usage() {
   cat >&2 <<'EOF'
 Usage: smoke-gptk-d3dmetal-local.zsh [options] <runtime-root-or-stack-archive>
 
-Runs the GPTK/D3DMetal D3D11 and D3D12 backend smoke tests against a temporary
-copy of a Konyak macOS runtime. The input may be either an assembled runtime
-root directory or konyak-macos-wine-runtime-stack.tar.zst.
+Runs the GPTK/D3DMetal D3D10 bridge and D3D11/D3D12 backend smoke tests
+against a temporary copy of a Konyak macOS runtime. The input may be either an
+assembled runtime root directory or konyak-macos-wine-runtime-stack.tar.zst.
 
 Options:
   --work-root <dir>          Reuse this local work directory for the copied
@@ -153,6 +153,11 @@ if [[ "$allow_unsupported_host" == 1 ]]; then
 else
   unset KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST
 fi
+
+"$repo_root/scripts/smoke-backend-device.zsh" \
+  "$smoke_runtime_root" \
+  gptk-d3d10-bridge \
+  "$probe_root"
 
 "$repo_root/scripts/smoke-backend-device.zsh" \
   "$smoke_runtime_root" \
