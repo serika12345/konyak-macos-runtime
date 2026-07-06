@@ -104,24 +104,37 @@ smoke rather than static binary inspection alone.
 
 The `redist` payload must be installed as an isolated optional component while
 preserving symlinks. Import tools must not overwrite the base Wine payload under
-`lib/wine/*`. The required runtime paths are:
+`lib/wine/*`. Import tools detect the GPTK variant from
+`D3DMetal.framework` `CFBundleShortVersionString`: GPTK3 metadata begins with
+`3`, and GPTK4 metadata begins with `4`.
+
+The active runtime paths common to GPTK3 and GPTK4 are:
 
 ```text
 components/gptk-d3dmetal/lib/external/D3DMetal.framework
 components/gptk-d3dmetal/lib/external/libd3dshared.dylib
-components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll
 components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll
 components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll
 components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll
 components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll
 components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll
-components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so
 components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so
 components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so
 components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so
 components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so
 components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so
 ```
+
+GPTK3 additionally requires the legacy `atidxx64.*` payloads:
+
+```text
+components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll
+components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so
+```
+
+GPTK4 does not ship those files. Runtime import and smoke checks must accept
+GPTK4 without them, while GPTK3 validation must continue to reject a GPTK3
+payload that is missing them.
 
 These Unix library paths must remain symlinks:
 
@@ -146,6 +159,27 @@ CrossOver 26.1 names the NVIDIA NGX shim `nvngx.dll` / `nvngx.so`. Konyak uses
 that name as the canonical runtime layout. Import tools may accept older
 `nvngx-on-metalfx` inputs as source files, but must normalize them to
 `nvngx.dll` / `nvngx.so` in the installed runtime.
+
+CI smoke preparation downloads the pinned Gcenx GPTK3 archive by default. A
+local or manually provisioned GPTK4 source can be supplied with
+`KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH`, which may point at a GPTK app, DMG, or
+redist directory. The supplied source remains transient smoke input and must not
+be uploaded as a Konyak artifact.
+
+The maintained local proof for GPTK4 variant support is:
+
+```text
+KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH=/Users/masato/Downloads/Game_Porting_Toolkit_4.0_beta_1.dmg \
+  ./scripts/smoke-gptk-d3dmetal-local.zsh --allow-unsupported-host \
+  --work-root /tmp/konyak-gptk4-local-smoke \
+  dist/konyak-macos-wine-runtime-stack.tar.zst
+```
+
+On 2026-07-06 this detected GPTK4, imported it without `atidxx64.*`, and passed
+`gptk-d3d10-unsupported`, `gptk-d3d11-device`, and `gptk-d3d12-device` against
+the local runtime stack. The matching GPTK3 regression proof is the same local
+smoke command without `KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH`, which detected the
+pinned Gcenx GPTK3 payload and passed the same smoke targets.
 
 ## Launch Contract
 

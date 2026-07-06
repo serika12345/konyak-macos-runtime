@@ -17,6 +17,10 @@ if ! tar --version 2>/dev/null | grep -q 'GNU tar'; then
   exit 69
 fi
 
+# Base Wine legitimately contains names such as d3d11.dll, d3d12.dll, and
+# dxgi.dll, so this check rejects all active component payloads under
+# components/gptk-d3dmetal and the GPTK-unique legacy overlay names that should
+# never appear in the base runtime library tree.
 forbidden_entries="$(
   tar -tf "$archive_path" |
     grep -E '(^|/)components/gptk-d3dmetal(/|$)|(^|/)lib/external/(D3DMetal\.framework(/|$)|libd3dshared\.dylib$)|(^|/)lib/wine/x86_64-(windows|unix)/(atidxx64|nvapi64|nvngx|nvngx-on-metalfx)\.(dll|so)$' ||

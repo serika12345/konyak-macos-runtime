@@ -11,6 +11,10 @@ Downloads the pinned Gcenx Game Porting Toolkit release asset, verifies its
 SHA-256, extracts the GPTK/D3DMetal payload, and imports it into the supplied
 runtime root for transient CI smoke verification.
 
+Set KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH to a local GPTK app, DMG, or redist
+directory to use that source instead of the pinned GPTK3 CI archive. This is the
+supported GPTK4-capable path for local or manually provisioned CI smoke runs.
+
 The downloaded archive and imported GPTK/D3DMetal payload must not be uploaded
 as Konyak artifacts or included in runtime release assets.
 EOF
@@ -28,6 +32,7 @@ readonly gptk_release_tag="${KONYAK_GPTK_D3DMETAL_CI_RELEASE_TAG:-Game-Porting-T
 readonly gptk_archive_name="${KONYAK_GPTK_D3DMETAL_CI_ARCHIVE_NAME:-game-porting-toolkit-3.0-3.tar.xz}"
 readonly gptk_archive_sha256="${KONYAK_GPTK_D3DMETAL_CI_ARCHIVE_SHA256:-d377683937340f914823dbb2e1252b329cbf834ff58907d0293db8cebf0e392e}"
 readonly gptk_archive_url="${KONYAK_GPTK_D3DMETAL_CI_ARCHIVE_URL:-https://github.com/Gcenx/game-porting-toolkit/releases/download/${gptk_release_tag}/${gptk_archive_name}}"
+readonly supplied_gptk_source="${KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH:-}"
 
 fail() {
   echo "$1" >&2
@@ -47,6 +52,24 @@ case "$(cd "$(dirname "$work_root")" && pwd -P)/$(basename "$work_root")" in
 esac
 
 mkdir -p "$work_root"
+
+if [[ -n "$supplied_gptk_source" ]]; then
+  [[ -e "$supplied_gptk_source" ]] ||
+    fail "Supplied GPTK/D3DMetal smoke source does not exist: $supplied_gptk_source" 66
+  case "$(cd "$(dirname "$supplied_gptk_source")" && pwd -P)/$(basename "$supplied_gptk_source")" in
+    "$repo_root/dist"|"$repo_root/dist"/*)
+      fail "Refusing to import GPTK/D3DMetal smoke payload from dist/: $supplied_gptk_source"
+      ;;
+  esac
+
+  "$repo_root/scripts/import-gptk-d3dmetal-redist.zsh" \
+    "$supplied_gptk_source" \
+    "$runtime_root"
+
+  echo "Prepared CI-only GPTK/D3DMetal smoke payload from supplied source: $supplied_gptk_source"
+  exit 0
+fi
+
 archive_path="$work_root/$gptk_archive_name"
 extract_root="$work_root/extract"
 

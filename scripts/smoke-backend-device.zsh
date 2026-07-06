@@ -37,6 +37,96 @@ backend_overrides=""
 backend_winedebug="${WINEDEBUG:--all}"
 expected_outcome="success"
 
+gptk_info_plist() {
+  local candidate
+
+  for candidate in \
+    "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework/Versions/A/Resources/Info.plist" \
+    "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework/Resources/Info.plist" \
+    "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework/Info.plist"
+  do
+    if [[ -f "$candidate" ]]; then
+      print -r -- "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+plist_string_value() {
+  local plist_path="$1"
+  local key="$2"
+  local value
+
+  if [[ -x /usr/libexec/PlistBuddy ]]; then
+    value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+      print -r -- "$value"
+      return 0
+    fi
+  fi
+
+  if command -v plutil >/dev/null 2>&1; then
+    value="$(plutil -extract "$key" raw -o - "$plist_path" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+      print -r -- "$value"
+      return 0
+    fi
+  fi
+
+  sed -n \
+    -e "s/.*<key>$key<\\/key>[[:space:]]*<string>\\([^<]*\\)<\\/string>.*/\\1/p" \
+    -e "/<key>$key<\\/key>/{n;s/.*<string>\\([^<]*\\)<\\/string>.*/\\1/p;q;}" \
+    "$plist_path"
+}
+
+detect_installed_gptk_payload_version() {
+  local info_plist
+  local framework_version
+  local normalized_version
+
+  info_plist="$(gptk_info_plist)" || {
+    echo "D3DMetal.framework does not contain GPTK version metadata." >&2
+    return 1
+  }
+  framework_version="$(plist_string_value "$info_plist" CFBundleShortVersionString)"
+  if [[ -z "$framework_version" ]]; then
+    echo "D3DMetal.framework does not contain GPTK version metadata." >&2
+    return 1
+  fi
+  normalized_version="${framework_version:l}"
+
+  case "$normalized_version" in
+    3|3.*|3b*)
+      print -r -- "gptk3"
+      ;;
+    4|4.*|4b*)
+      print -r -- "gptk4"
+      ;;
+    *)
+      echo "Unsupported GPTK/D3DMetal framework version: $framework_version" >&2
+      return 1
+      ;;
+  esac
+}
+
+drop_gptk3_legacy_required_paths_for_gptk4() {
+  local required_path
+  local -a filtered_required_paths
+
+  filtered_required_paths=()
+  for required_path in "${required_paths[@]}"; do
+    if [[ "$required_path" == "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll" ||
+      "$required_path" == "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so" ]]; then
+      continue
+    fi
+    filtered_required_paths+=("$required_path")
+  done
+
+  required_paths=("${filtered_required_paths[@]}")
+}
+
 case "$backend" in
   dxvk-d3d10-render)
     probe_name="d3d10_render_probe.exe"
@@ -272,6 +362,10 @@ case "$backend" in
 esac
 
 if [[ "$backend" == gptk-* ]]; then
+  gptk_payload_version="$(detect_installed_gptk_payload_version)" || exit 65
+  if [[ "$gptk_payload_version" == "gptk4" ]]; then
+    drop_gptk3_legacy_required_paths_for_gptk4
+  fi
   forbidden_paths=(
     "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d10.dll"
     "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d10.so"
@@ -307,7 +401,7 @@ done
 
 probe_path="$probe_dir/$probe_name"
 if [[ ! -f "$probe_path" ]]; then
-  "$repo_root/scripts/build-backend-probes.zsh" "$probe_dir" >/dev/null
+  /bin/zsh "$repo_root/scripts/build-backend-probes.zsh" "$probe_dir" >/dev/null
 fi
 if [[ ! -f "$probe_path" ]]; then
   echo "Backend probe executable was not built: $probe_path" >&2
