@@ -56,9 +56,23 @@ D3DMetal/GPTK license terms referenced by the Gcenx release; Konyak runtime
 GitHub hosted macOS arm64 runners expose an Apple Paravirtual GPU that
 D3DMetal rejects after the GPTK loader path is reached. CI jobs may set
 `KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1` to accept only the exact unsupported-host
-signature emitted by D3DMetal on that hosted runner. D3D10 smoke proves that
-base Wine D3D10 reaches the GPTK D3D11/DXGI bridge; D3D11/D3D12 smoke must
-still prove real device creation when that variable is unset.
+signature emitted by D3DMetal on that hosted runner. D3D10 GPTK smoke must not
+claim render support from bridge reachability. The expected GPTK/D3DMetal D3D10
+contract is unsupported unless native GPTK/D3DMetal `dxgi` / `d3d11` returns a
+real `ID3D10Device` and passes render/readback in a future reviewed change.
+
+The actual maintained D3D10 render proof for the bundled runtime stack is the
+DXVK path. `smoke-backend-device.zsh <runtime> dxvk-d3d10-render` creates a
+D3D10 device, clears an offscreen render target, copies it to a staging texture,
+and verifies the readback pixel. DXMT remains covered by its D3D11 backend
+smoke; this runtime does not claim DXMT D3D10 render support.
+
+Konyak also targets CrossOver-equivalent D3D10 fallback behavior. CrossOver.app
+passes the D3D10 render/readback probe through builtin WineD3D with winevulkan,
+not through GPTK/D3DMetal. Runtime smoke coverage must therefore add a maintained
+base-Wine `wined3d-d3d10-render` path that uses builtin `d3d10`, `d3d10core`,
+`d3d11`, `dxgi`, `wined3d`, and `winevulkan` without DXVK, DXMT, or GPTK
+override paths.
 
 ## Runtime Layout
 
@@ -93,9 +107,9 @@ components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so -> ../../external/libd3dsh
 
 Do not install Apple GPTK `d3d10.dll` or `d3d10.so` into the active
 `components/gptk-d3dmetal` layout. CrossOver's shipped GPTK layout does not
-override D3D10; D3D10 must continue to use the base Wine builtin frontend and
-then reach the selected native D3D11/DXGI backend through Wine's normal D3D10
-bridge.
+override D3D10. D3D10 must be routed outside GPTK/D3DMetal: DXVK is the primary
+D3D10 render path, and the base WineD3D/winevulkan route is the
+CrossOver-equivalent fallback path.
 
 Do not copy those symlinks as independent Mach-O files. The D3DMetal component
 must be kept across base runtime reinstall/update operations. Legacy imports

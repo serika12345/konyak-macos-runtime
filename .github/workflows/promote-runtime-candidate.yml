@@ -222,8 +222,8 @@ jobs:
           ./scripts/check-gstreamer-component.zsh "$smoke_runtime_root"
           nix develop -c zsh -lc "./scripts/smoke-gui-launch.zsh $smoke_runtime_root"
 
-  smoke-dxvk-d3d11:
-    name: Verify DXVK D3D11 backend smoke
+  smoke-dxvk-d3d10-d3d11:
+    name: Verify DXVK D3D10/D3D11 backend smoke
     needs: normalize-candidate
     runs-on: macos-15
     timeout-minutes: 45
@@ -246,7 +246,7 @@ jobs:
           name: konyak-macos-candidate-release-payload
           path: dist
 
-      - name: Verify DXVK D3D11 backend smoke
+      - name: Verify DXVK D3D10/D3D11 backend smoke
         run: |
           smoke_runtime_root="/tmp/konyak-dxvk-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
@@ -255,6 +255,7 @@ jobs:
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
+          nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d10-render"
           nix develop -c zsh -lc "./scripts/smoke-backend-device.zsh $smoke_runtime_root dxvk-d3d11"
 
   smoke-dxmt-d3d11:
@@ -374,7 +375,7 @@ jobs:
       - normalize-candidate
       - smoke-wine32on64
       - smoke-gui-launch
-      - smoke-dxvk-d3d11
+      - smoke-dxvk-d3d10-d3d11
       - smoke-dxmt-d3d11
       - smoke-vkd3d-d3d12
       - smoke-gptk-d3dmetal
