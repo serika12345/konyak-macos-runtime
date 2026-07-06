@@ -7,7 +7,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: smoke-gptk-d3dmetal-local.zsh [options] <runtime-root-or-stack-archive>
 
-Runs the GPTK/D3DMetal D3D10 bridge and D3D11/D3D12 backend smoke tests
+Runs the GPTK/D3DMetal D3D10 unsupported and D3D11/D3D12 backend smoke tests
 against a temporary copy of a Konyak macOS runtime. The input may be either an
 assembled runtime root directory or konyak-macos-wine-runtime-stack.tar.zst.
 
@@ -156,7 +156,7 @@ fi
 
 "$repo_root/scripts/smoke-backend-device.zsh" \
   "$smoke_runtime_root" \
-  gptk-d3d10-bridge \
+  gptk-d3d10-unsupported \
   "$probe_root"
 
 "$repo_root/scripts/smoke-backend-device.zsh" \

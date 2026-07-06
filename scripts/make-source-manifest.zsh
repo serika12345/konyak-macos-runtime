@@ -37,7 +37,7 @@ component_version() {
       echo "v1.10.3-20230507+dxvk-1.10.3-d3d10"
       ;;
     moltenvk)
-      echo "v1.4.1"
+      echo "crossover-${version}-moltenvk-konyak.0"
       ;;
     gstreamer)
       echo "nix-gstreamer+plugins"

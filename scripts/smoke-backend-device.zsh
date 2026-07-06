@@ -8,7 +8,7 @@ probe_dir="${3:-$repo_root/.dart_tool/backend-probes}"
 timeout_seconds="${KONYAK_BACKEND_SMOKE_TIMEOUT_SECONDS:-180}"
 
 if [[ -z "$runtime_root" || -z "$backend" ]]; then
-  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d10-render|dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d10-bridge|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
+  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d10-render|wined3d-d3d10-render|dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d10-unsupported|gptk-d3d10-bridge|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
   exit 64
 fi
 
@@ -34,6 +34,8 @@ probe_runtime_directory=""
 probe_launch_path=""
 success_marker=""
 backend_overrides=""
+backend_winedebug="${WINEDEBUG:--all}"
+expected_outcome="success"
 
 case "$backend" in
   dxvk-d3d10-render)
@@ -51,6 +53,24 @@ case "$backend" in
       "$runtime_root/lib/dxvk/x86_64-windows/d3d10_1.dll"
       "$runtime_root/lib/dxvk/x86_64-windows/d3d10core.dll"
       "$runtime_root/lib/dxvk/x86_64-windows/d3d11.dll"
+      "$runtime_root/lib/libMoltenVK.dylib"
+    )
+    ;;
+  wined3d-d3d10-render)
+    probe_name="d3d10_render_probe.exe"
+    probe_runtime_directory="$runtime_root/lib/wine/x86_64-windows"
+    success_marker="KONYAK_D3D10_RENDER_PROBE_OK"
+    backend_overrides="dxgi,d3d10,d3d10_1,d3d10core,d3d11,wined3d,winevulkan=b"
+    backend_winedebug="${WINEDEBUG:-+loaddll}"
+    required_paths=(
+      "$runtime_root/lib/wine/x86_64-windows/dxgi.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10_1.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10core.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d11.dll"
+      "$runtime_root/lib/wine/x86_64-windows/wined3d.dll"
+      "$runtime_root/lib/wine/x86_64-windows/winevulkan.dll"
+      "$runtime_root/lib/wine/x86_64-unix/winevulkan.so"
       "$runtime_root/lib/libMoltenVK.dylib"
     )
     ;;
@@ -107,9 +127,47 @@ case "$backend" in
     ;;
   gptk-d3d10-bridge)
     probe_name="d3d10_device_probe.exe"
-    probe_runtime_directory="$runtime_root/lib/wine/x86_64-windows"
+    probe_runtime_directory="$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
     success_marker="KONYAK_D3D10_DEVICE_PROBE_OK"
     backend_overrides="dxgi,d3d11,d3d12,nvapi64,nvngx=n,b"
+    dll_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    )
+    dyld_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix"
+    )
+    dyld_framework_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+    )
+    required_paths=(
+      "$runtime_root/lib/wine/x86_64-windows/d3d10.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10_1.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10core.dll"
+      "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so"
+    )
+    ;;
+  gptk-d3d10-unsupported)
+    probe_name="d3d10_render_probe.exe"
+    probe_runtime_directory="$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    success_marker="KONYAK_D3D10_RENDER_PROBE_OK"
+    expected_outcome="gptk-d3d10-unsupported"
+    backend_overrides="dxgi,d3d11,d3d12,nvapi64,nvngx=n,b"
+    backend_winedebug="${WINEDEBUG:-+loaddll}"
     dll_path_entries=(
       "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
     )
@@ -290,6 +348,7 @@ print_log_excerpt() {
 print_runtime_diagnostics() {
   echo "----- backend smoke diagnostics -----" >&2
   echo "backend=$backend" >&2
+  echo "expected_outcome=$expected_outcome" >&2
   echo "runtime_root=$runtime_root" >&2
   echo "probe_path=$probe_path" >&2
   echo "probe_launch_path=$probe_launch_path" >&2
@@ -297,6 +356,7 @@ print_runtime_diagnostics() {
   echo "WINEDATADIR=$WINEDATADIR" >&2
   echo "WINELOADER=$WINELOADER" >&2
   echo "WINESERVER=$WINESERVER" >&2
+  echo "WINEDEBUG=$WINEDEBUG" >&2
   echo "WINEDLLPATH=$WINEDLLPATH" >&2
   print -r -- "WINEPATH=${WINEPATH:-}" >&2
   echo "WINEDLLOVERRIDES=$WINEDLLOVERRIDES" >&2
@@ -357,6 +417,90 @@ log_contains() {
   return 1
 }
 
+log_matches_regex() {
+  local path="$1"
+  local pattern="$2"
+
+  [[ -s "$path" ]] || return 1
+  /usr/bin/grep -E "$pattern" "$path" >/dev/null 2>&1
+}
+
+require_probe_log_regex() {
+  local pattern="$1"
+  local description="$2"
+
+  if ! log_matches_regex "$stderr_path" "$pattern"; then
+    echo "Backend smoke did not prove expected load route: $description" >&2
+    print_log_excerpt "stdout" "$stdout_path"
+    print_log_excerpt "stderr" "$stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+}
+
+forbid_probe_log_regex() {
+  local pattern="$1"
+  local description="$2"
+
+  if log_matches_regex "$stderr_path" "$pattern"; then
+    echo "Backend smoke loaded an unexpected route: $description" >&2
+    print_log_excerpt "stdout" "$stdout_path"
+    print_log_excerpt "stderr" "$stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+}
+
+validate_no_component_escape() {
+  forbid_probe_log_regex 'lib[\\/]+dxvk[\\/]+' "DXVK component DLL path"
+  forbid_probe_log_regex 'lib[\\/]+dxmt[\\/]+' "DXMT component DLL path"
+  forbid_probe_log_regex 'components[\\/]+gptk-d3dmetal[\\/]+' "GPTK/D3DMetal component path"
+}
+
+validate_wined3d_d3d10_route() {
+  validate_no_component_escape
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+dxgi\.dll.*builtin' "builtin dxgi.dll"
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+d3d10\.dll.*builtin' "builtin d3d10.dll"
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+d3d10core\.dll.*builtin' "builtin d3d10core.dll"
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+d3d11\.dll.*builtin' "builtin d3d11.dll"
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+wined3d\.dll.*builtin' "builtin wined3d.dll"
+  require_probe_log_regex '(windows[\\/]+system32|lib[\\/]+wine[\\/]+x86_64-windows)[\\/]+winevulkan\.dll.*builtin' "builtin winevulkan.dll"
+}
+
+validate_gptk_d3d10_unsupported_route() {
+  if log_contains "$stdout_path" "$success_marker"; then
+    echo "GPTK/D3DMetal D3D10 unexpectedly passed render/readback." >&2
+    print_log_excerpt "stdout" "$stdout_path"
+    print_log_excerpt "stderr" "$stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+  if ! log_contains "$stdout_path" "HRESULT DXGID3D10CreateDevice"; then
+    echo "GPTK/D3DMetal D3D10 smoke did not reach the GPTK D3D10 bridge entry." >&2
+    print_log_excerpt "stdout" "$stdout_path"
+    print_log_excerpt "stderr" "$stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+  if ! log_contains "$stderr_path" "D3D10CreateDevice failed: 0x80004005"; then
+    echo "GPTK/D3DMetal D3D10 smoke did not return the expected unsupported HRESULT." >&2
+    print_log_excerpt "stdout" "$stdout_path"
+    print_log_excerpt "stderr" "$stderr_path"
+    print_runtime_diagnostics
+    exit 65
+  fi
+
+  forbid_probe_log_regex 'lib[\\/]+dxvk[\\/]+' "DXVK component DLL path"
+  forbid_probe_log_regex 'lib[\\/]+dxmt[\\/]+' "DXMT component DLL path"
+  forbid_probe_log_regex 'C:[\\/]+windows[\\/]+system32[\\/]+dxgi\.dll.*builtin' "base builtin dxgi.dll"
+  forbid_probe_log_regex 'C:[\\/]+windows[\\/]+system32[\\/]+d3d11\.dll.*builtin' "base builtin d3d11.dll"
+  forbid_probe_log_regex 'C:[\\/]+windows[\\/]+system32[\\/]+winevulkan\.dll' "winevulkan fallback"
+  forbid_probe_log_regex 'Using the Vulkan renderer for d3d10/11 applications' "WineD3D Vulkan renderer"
+  require_probe_log_regex 'C:[\\/]+windows[\\/]+system32[\\/]+d3d10\.dll.*builtin' "builtin d3d10.dll"
+  require_probe_log_regex 'components[\\/]+gptk-d3dmetal[\\/]+lib[\\/]+wine[\\/]+x86_64-windows[\\/]+dxgi\.dll.*(native|builtin)' "GPTK component dxgi.dll"
+  require_probe_log_regex 'components[\\/]+gptk-d3dmetal[\\/]+lib[\\/]+wine[\\/]+x86_64-windows[\\/]+d3d11\.dll.*(native|builtin)' "GPTK component d3d11.dll"
+}
+
 is_allowed_gptk_unsupported_host() {
   local log_path
 
@@ -374,7 +518,7 @@ is_allowed_gptk_unsupported_host() {
 }
 
 is_allowed_gptk_d3d10_bridge_failure() {
-  [[ "$backend" == gptk-d3d10-* ]] || return 1
+  [[ "$backend" == gptk-d3d10-bridge ]] || return 1
   [[ "${KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST:-0}" == "1" ]] || return 1
 
   log_contains "$stdout_path" "HRESULT DXGID3D10CreateDevice" &&
@@ -455,6 +599,9 @@ run_wine_with_timeout() {
     if is_allowed_gptk_d3d10_bridge_failure; then
       accept_gptk_d3d10_bridge_failure
     fi
+    if [[ "$label" == "$backend" && "$expected_outcome" == "gptk-d3d10-unsupported" ]]; then
+      return 0
+    fi
     echo "Backend smoke $label exited with code $exit_code." >&2
     print_log_excerpt "stdout" "$command_stdout_path"
     print_log_excerpt "stderr" "$command_stderr_path"
@@ -515,7 +662,7 @@ done
 
 export WINEPREFIX="$prefix"
 export WINEARCH=win64
-export WINEDEBUG="${WINEDEBUG:--all}"
+export WINEDEBUG="$backend_winedebug"
 export WINEDLLOVERRIDES="$backend_overrides"
 export GST_DEBUG="${GST_DEBUG:-1}"
 export GST_PLUGIN_SYSTEM_PATH="$runtime_root/lib/gstreamer-1.0"
@@ -573,12 +720,26 @@ run_wine_with_timeout \
   "$exit_status_path" \
   "$wine_executable" "$probe_launch_path"
 
-if ! log_contains "$stdout_path" "$success_marker"; then
-  echo "Backend smoke did not print the expected marker: $success_marker" >&2
-  print_log_excerpt "stdout" "$stdout_path"
-  print_log_excerpt "stderr" "$stderr_path"
-  print_runtime_diagnostics
-  exit 65
-fi
+case "$expected_outcome" in
+  success)
+    if ! log_contains "$stdout_path" "$success_marker"; then
+      echo "Backend smoke did not print the expected marker: $success_marker" >&2
+      print_log_excerpt "stdout" "$stdout_path"
+      print_log_excerpt "stderr" "$stderr_path"
+      print_runtime_diagnostics
+      exit 65
+    fi
+    if [[ "$backend" == wined3d-d3d10-render ]]; then
+      validate_wined3d_d3d10_route
+    fi
+    ;;
+  gptk-d3d10-unsupported)
+    validate_gptk_d3d10_unsupported_route
+    ;;
+  *)
+    echo "Unknown backend smoke expected outcome: $expected_outcome" >&2
+    exit 70
+    ;;
+esac
 
 echo "Backend smoke OK: $backend"

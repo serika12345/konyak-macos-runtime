@@ -58,8 +58,15 @@ D3DMetal rejects after the GPTK loader path is reached. CI jobs may set
 `KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1` to accept only the exact unsupported-host
 signature emitted by D3DMetal on that hosted runner. D3D10 GPTK smoke must not
 claim render support from bridge reachability. The expected GPTK/D3DMetal D3D10
-contract is unsupported unless native GPTK/D3DMetal `dxgi` / `d3d11` returns a
-real `ID3D10Device` and passes render/readback in a future reviewed change.
+contract is unsupported. `smoke-backend-device.zsh <runtime>
+gptk-d3d10-unsupported` must route `dxgi` / `d3d11` from the isolated
+GPTK/D3DMetal component, fail if the render/readback success marker appears,
+forbid DXVK/DXMT or winevulkan render fallback, and require the known
+unsupported `0x80004005` signature until a future reviewed change proves native
+GPTK/D3DMetal D3D10 render/readback. Wine `+loaddll` may report the component
+`dxgi` / `d3d11` files as either native or builtin; the maintained proof is the
+resolved component path plus the unsupported HRESULT, not the display label
+alone.
 
 The actual maintained D3D10 render proof for the bundled runtime stack is the
 DXVK path. `smoke-backend-device.zsh <runtime> dxvk-d3d10-render` creates a
@@ -70,9 +77,28 @@ smoke; this runtime does not claim DXMT D3D10 render support.
 Konyak also targets CrossOver-equivalent D3D10 fallback behavior. CrossOver.app
 passes the D3D10 render/readback probe through builtin WineD3D with winevulkan,
 not through GPTK/D3DMetal. Runtime smoke coverage must therefore add a maintained
-base-Wine `wined3d-d3d10-render` path that uses builtin `d3d10`, `d3d10core`,
-`d3d11`, `dxgi`, `wined3d`, and `winevulkan` without DXVK, DXMT, or GPTK
-override paths.
+base-Wine `wined3d-d3d10-render` path. `smoke-backend-device.zsh <runtime>
+wined3d-d3d10-render` uses builtin `d3d10`, `d3d10core`, `d3d11`, `dxgi`,
+`wined3d`, and `winevulkan` without DXVK, DXMT, or GPTK override paths, then
+verifies the same D3D10 render/readback marker as the DXVK path.
+
+CrossOver's bundled MoltenVK is part of the WineD3D/Vulkan D3D10 fallback
+contract. The CrossOver FOSS MoltenVK source advertises D3D10-relevant Vulkan
+feature bits on Apple GPUs that upstream MoltenVK release binaries do not
+advertise, including `geometryShader`, `pipelineStatisticsQuery`, and
+`shaderCullDistance` comments that explicitly reference DXVK/D3D10 or related
+compatibility. Konyak must not patch the CrossOver Wine derivation to emulate
+those feature bits inside WineD3D. Instead, the runtime owner builds a
+`konyak-macos-moltenvk` component from the pinned CrossOver FOSS source and
+packages that component as `konyak-macos-moltenvk.tar.zst`.
+
+The MoltenVK recipe must fail if the pinned CrossOver source no longer contains
+the expected D3D10 feature-advertisement source lines. The component archive
+must contain `lib/libMoltenVK.dylib`, be universal `x86_64`/`arm64`, carry the
+install name `@rpath/libMoltenVK.dylib`, avoid unpackaged Nix store dylib
+references, and declare `components.moltenvk` in `.konyak-runtime-stack.json`.
+The maintained behavioral proof remains the dynamic `wined3d-d3d10-render`
+smoke rather than static binary inspection alone.
 
 ## Runtime Layout
 
@@ -134,3 +160,18 @@ WINEPATH=Z:\path\to\runtime\components\gptk-d3dmetal\lib\wine\x86_64-windows
 WINEDLLOVERRIDES=dxgi,d3d11,d3d12,nvapi64,nvngx=n,b
 D3DM_SUPPORT_DXR=1
 ```
+
+When Konyak launches a macOS program that imports D3D10 while GPTK/D3DMetal is
+selected, the application launch contract must not leave the process on the
+native GPTK/D3DMetal route. The parent CLI should select the base WineD3D /
+winevulkan fallback for that run, remove stale GPTK/D3DMetal override DLLs from
+the bottle, and emit machine-readable diagnostics:
+
+```text
+KONYAK_GRAPHICS_BACKEND_REQUESTED=gptk-d3dmetal
+KONYAK_GRAPHICS_BACKEND_SELECTED=wined3d-vulkan
+KONYAK_GRAPHICS_BACKEND_FALLBACK_REASON=gptkD3d10Unsupported
+```
+
+D3D12 imports take priority over D3D10 imports. A program that imports D3D12
+must remain on GPTK/D3DMetal when GPTK/D3DMetal is selected.

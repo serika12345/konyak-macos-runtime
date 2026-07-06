@@ -57,6 +57,10 @@
           wineRuntime = wineRuntimeForDxmt;
         };
 
+        packages.konyak-macos-moltenvk = pkgs.callPackage ./nix/moltenvk-crossover.nix {
+          inherit crossoverSource;
+        };
+
         packages.gptk-d3dmetal-local-smoke = pkgs.writeShellApplication {
           name = "gptk-d3dmetal-local-smoke";
           runtimeInputs = [
