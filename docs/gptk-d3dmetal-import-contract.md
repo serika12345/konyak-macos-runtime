@@ -181,6 +181,24 @@ the local runtime stack. The matching GPTK3 regression proof is the same local
 smoke command without `KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH`, which detected the
 pinned Gcenx GPTK3 payload and passed the same smoke targets.
 
+The maintained parent-repository public CLI proof is:
+
+```text
+nix develop -c zsh -lc 'just smoke-macos-gptk-import-cli'
+```
+
+That proof installs a fresh Konyak macOS runtime through
+`install-macos-wine --reinstall --source-manifest ... --json` for each Apple
+payload, then imports GPTK3 through
+`install-gptk-wine --from <Game_Porting_Toolkit_3.x.dmg> --json` and imports
+GPTK4 through
+`install-gptk-wine --from <Game_Porting_Toolkit_4.x.dmg> --gptk-version 4 --json`.
+It verifies that `list-runtimes --json` reports the optional
+`gptk-d3dmetal` component and backend as available, that GPTK4 did not install
+legacy `atidxx64.*` payloads, and that the maintained
+`gptk-d3d10-unsupported`, `gptk-d3d11-device`, and `gptk-d3d12-device` smoke
+targets pass against both imported runtimes.
+
 ## Launch Contract
 
 Konyak must set the runtime environment when GPTK/D3DMetal is selected:
