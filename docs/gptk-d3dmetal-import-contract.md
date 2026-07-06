@@ -60,6 +60,12 @@ signature emitted by D3DMetal on that hosted runner. D3D10 smoke proves that
 base Wine D3D10 reaches the GPTK D3D11/DXGI bridge; D3D11/D3D12 smoke must
 still prove real device creation when that variable is unset.
 
+The actual maintained D3D10 render proof for the bundled runtime stack is the
+DXVK path. `smoke-backend-device.zsh <runtime> dxvk-d3d10-render` creates a
+D3D10 device, clears an offscreen render target, copies it to a staging texture,
+and verifies the readback pixel. DXMT remains covered by its D3D11 backend
+smoke; this runtime does not claim DXMT D3D10 render support.
+
 ## Runtime Layout
 
 The `redist` payload must be installed as an isolated optional component while

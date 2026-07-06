@@ -8,7 +8,7 @@ probe_dir="${3:-$repo_root/.dart_tool/backend-probes}"
 timeout_seconds="${KONYAK_BACKEND_SMOKE_TIMEOUT_SECONDS:-180}"
 
 if [[ -z "$runtime_root" || -z "$backend" ]]; then
-  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d10-bridge|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
+  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d10-render|dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d10-bridge|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
   exit 64
 fi
 
@@ -36,6 +36,24 @@ success_marker=""
 backend_overrides=""
 
 case "$backend" in
+  dxvk-d3d10-render)
+    probe_name="d3d10_render_probe.exe"
+    probe_runtime_directory="$runtime_root/lib/dxvk/x86_64-windows"
+    success_marker="KONYAK_D3D10_RENDER_PROBE_OK"
+    backend_overrides="dxgi,d3d9,d3d10,d3d10_1,d3d10core,d3d11=n,b"
+    dll_path_entries=(
+      "$runtime_root/lib/dxvk/x86_64-windows"
+      "$runtime_root/lib/dxvk/i386-windows"
+    )
+    required_paths=(
+      "$runtime_root/lib/dxvk/x86_64-windows/dxgi.dll"
+      "$runtime_root/lib/dxvk/x86_64-windows/d3d10.dll"
+      "$runtime_root/lib/dxvk/x86_64-windows/d3d10_1.dll"
+      "$runtime_root/lib/dxvk/x86_64-windows/d3d10core.dll"
+      "$runtime_root/lib/dxvk/x86_64-windows/d3d11.dll"
+      "$runtime_root/lib/libMoltenVK.dylib"
+    )
+    ;;
   dxvk-d3d11)
     probe_name="d3d11_device_probe.exe"
     probe_runtime_directory="$runtime_root/lib/dxvk/x86_64-windows"
