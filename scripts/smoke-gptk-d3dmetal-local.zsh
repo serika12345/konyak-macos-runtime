@@ -23,8 +23,10 @@ Options:
                              supplied.
   -h, --help                 Show this help.
 
-The pinned Gcenx GPTK/D3DMetal archive is downloaded only as a transient smoke
-input. Do not upload the work directory or include it in Konyak release assets.
+The pinned Gcenx GPTK3/D3DMetal archive is downloaded only as a transient smoke
+input. Set KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH to a local GPTK4 app, DMG, or
+redist directory to use that source instead. Do not upload the work directory or
+include it in Konyak release assets.
 EOF
 }
 

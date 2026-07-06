@@ -120,16 +120,7 @@ jobs:
             '.components |= map(.archiveUrl = $stack_url | .sha256 = $stack_sha)' \
             candidate/konyak-macos-wine-runtime-stack-source.json \
             > dist/konyak-macos-wine-runtime-stack-source.json
-          forbidden_gptk_entries="$(
-            tar -tf dist/konyak-macos-wine-runtime-stack.tar.zst |
-              grep -E '(^|/)components/gptk-d3dmetal(/|$)|(^|/)lib/external/(D3DMetal\.framework(/|$)|libd3dshared\.dylib$)|(^|/)lib/wine/x86_64-(windows|unix)/(atidxx64|nvapi64|nvngx|nvngx-on-metalfx)\.(dll|so)$' ||
-              true
-          )"
-          if [[ -n "$forbidden_gptk_entries" ]]; then
-            echo "candidate runtime archive must not include GPTK/D3DMetal payload paths:" >&2
-            echo "$forbidden_gptk_entries" >&2
-            exit 65
-          fi
+          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
 
           echo "release-tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release-title=Konyak macOS runtime $release_tag" >> "$GITHUB_OUTPUT"

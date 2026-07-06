@@ -3,12 +3,13 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: import-gptk-d3dmetal-redist.zsh <gptk-3.0-dmg-or-redist-dir> <runtime-root>
+Usage: import-gptk-d3dmetal-redist.zsh <gptk-dmg-or-redist-dir> <runtime-root>
 
 Overlays Apple GPTK/D3DMetal redist files into a Konyak macOS Wine runtime.
 The source may be either:
 
 - Game_Porting_Toolkit_3.0.dmg
+- Game_Porting_Toolkit_4.0_beta_1.dmg
 - the nested "Evaluation environment for Windows games 3.0.dmg"
 - an already mounted/extracted redist directory
 EOF
@@ -112,6 +113,80 @@ require_symlink() {
     fail "GPTK redist symlink target mismatch for $path: expected $target, got $actual_target"
 }
 
+d3dmetal_info_plist() {
+  local candidate
+
+  for candidate in \
+    "$redist_root/external/D3DMetal.framework/Versions/A/Resources/Info.plist" \
+    "$redist_root/external/D3DMetal.framework/Resources/Info.plist" \
+    "$redist_root/external/D3DMetal.framework/Info.plist"
+  do
+    if [[ -f "$candidate" ]]; then
+      print -r -- "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+plist_string_value() {
+  local plist_path="$1"
+  local key="$2"
+  local value
+
+  if [[ -x /usr/libexec/PlistBuddy ]]; then
+    value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+      print -r -- "$value"
+      return 0
+    fi
+  fi
+
+  if command -v plutil >/dev/null 2>&1; then
+    value="$(plutil -extract "$key" raw -o - "$plist_path" 2>/dev/null || true)"
+    if [[ -n "$value" ]]; then
+      print -r -- "$value"
+      return 0
+    fi
+  fi
+
+  sed -n \
+    -e "s/.*<key>$key<\\/key>[[:space:]]*<string>\\([^<]*\\)<\\/string>.*/\\1/p" \
+    -e "/<key>$key<\\/key>/{n;s/.*<string>\\([^<]*\\)<\\/string>.*/\\1/p;q;}" \
+    "$plist_path"
+}
+
+detect_gptk_payload_version() {
+  local info_plist
+  local framework_version
+  local normalized_version
+
+  info_plist="$(d3dmetal_info_plist)" || {
+    echo "D3DMetal.framework does not contain GPTK version metadata." >&2
+    return 1
+  }
+  framework_version="$(plist_string_value "$info_plist" CFBundleShortVersionString)"
+  if [[ -z "$framework_version" ]]; then
+    echo "D3DMetal.framework does not contain GPTK version metadata." >&2
+    return 1
+  fi
+  normalized_version="${framework_version:l}"
+
+  case "$normalized_version" in
+    3|3.*|3b*)
+      print -r -- "gptk3"
+      ;;
+    4|4.*|4b*)
+      print -r -- "gptk4"
+      ;;
+    *)
+      echo "Unsupported GPTK/D3DMetal framework version: $framework_version" >&2
+      return 1
+      ;;
+  esac
+}
+
 resolve_redist_path() {
   local relative_path="$1"
   local candidate
@@ -146,23 +221,28 @@ find_redist "$source_path" ||
   fail "Runtime root does not look like a Konyak x86_64 Wine runtime: $runtime_root"
 
 component_root="$runtime_root/components/gptk-d3dmetal"
+gptk_payload_version="$(detect_gptk_payload_version)" || exit 65
 
 required_paths=(
   external/D3DMetal.framework
   external/libd3dshared.dylib
-  wine/x86_64-windows/atidxx64.dll
   wine/x86_64-windows/d3d11.dll
   wine/x86_64-windows/d3d12.dll
   wine/x86_64-windows/dxgi.dll
   wine/x86_64-windows/nvapi64.dll
   wine/x86_64-windows/nvngx.dll
-  wine/x86_64-unix/atidxx64.so
   wine/x86_64-unix/d3d11.so
   wine/x86_64-unix/d3d12.so
   wine/x86_64-unix/dxgi.so
   wine/x86_64-unix/nvapi64.so
   wine/x86_64-unix/nvngx.so
 )
+if [[ "$gptk_payload_version" == "gptk3" ]]; then
+  required_paths+=(
+    wine/x86_64-windows/atidxx64.dll
+    wine/x86_64-unix/atidxx64.so
+  )
+fi
 
 local_path=
 source_local_path=
@@ -184,27 +264,35 @@ mkdir -p \
 
 rsync -a --delete "$redist_root/external/" "$component_root/lib/external/"
 
-for local_path in \
-  atidxx64.dll \
-  d3d11.dll \
-  d3d12.dll \
-  dxgi.dll \
-  nvapi64.dll \
+windows_payloads=(
+  d3d11.dll
+  d3d12.dll
+  dxgi.dll
+  nvapi64.dll
   nvngx.dll
-do
+)
+if [[ "$gptk_payload_version" == "gptk3" ]]; then
+  windows_payloads=(atidxx64.dll "${windows_payloads[@]}")
+fi
+
+for local_path in "${windows_payloads[@]}"; do
   source_local_path="$(resolve_redist_path "wine/x86_64-windows/$local_path")"
   rm -f "$component_root/lib/wine/x86_64-windows/$local_path"
   cp -a "$source_local_path" "$component_root/lib/wine/x86_64-windows/$local_path"
 done
 
-for local_path in \
-  atidxx64.so \
-  d3d11.so \
-  d3d12.so \
-  dxgi.so \
-  nvapi64.so \
+unix_payloads=(
+  d3d11.so
+  d3d12.so
+  dxgi.so
+  nvapi64.so
   nvngx.so
-do
+)
+if [[ "$gptk_payload_version" == "gptk3" ]]; then
+  unix_payloads=(atidxx64.so "${unix_payloads[@]}")
+fi
+
+for local_path in "${unix_payloads[@]}"; do
   source_local_path="$(resolve_redist_path "wine/x86_64-unix/$local_path")"
   rm -f "$component_root/lib/wine/x86_64-unix/$local_path"
   cp -a "$source_local_path" "$component_root/lib/wine/x86_64-unix/$local_path"
@@ -220,3 +308,4 @@ require_symlink "$component_root/lib/wine/x86_64-unix/d3d12.so" "../../external/
 require_symlink "$component_root/lib/wine/x86_64-unix/dxgi.so" "../../external/libd3dshared.dylib"
 
 echo "Imported GPTK/D3DMetal redist into: $component_root"
+echo "Detected GPTK/D3DMetal payload version: $gptk_payload_version"
