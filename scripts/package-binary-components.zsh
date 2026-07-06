@@ -34,10 +34,6 @@ readonly dxvk_d3d10_url="https://github.com/doitsujin/dxvk/releases/download/v${
 readonly dxvk_d3d10_sha256="8d1a3c912761b450c879f98478ae64f6f6639e40ce6848170a0f6b8596fd53c6"
 readonly dxvk_component_version="${dxvk_macos_version}+dxvk-${dxvk_d3d10_version}-d3d10"
 
-readonly moltenvk_version="v1.4.1"
-readonly moltenvk_url="https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-macos.tar"
-readonly moltenvk_sha256="5ea0c259df7ded9a275444820f09cced54d6e5a7c7a31d262de62a5cdb7e15cf"
-
 readonly wine_mono_version="10.4.1"
 readonly wine_mono_url="https://github.com/wine-mono/wine-mono/releases/download/wine-mono-10.4.1/wine-mono-10.4.1-x86.msi"
 readonly wine_mono_sha256="071f4b2887e1c97a11d791ff3d65be9429eed6dec4c2708888bfd546ba358e23"
@@ -300,29 +296,6 @@ package_dxvk_macos() {
   archive_payload "$payload_root" "$archive_path"
 }
 
-package_moltenvk() {
-  local archive_cache="$cache_dir/MoltenVK-macos-$moltenvk_version.tar"
-  local work_root="$dist_dir/work/moltenvk"
-  local extract_root="$work_root/extract"
-  local payload_root="$work_root/payload"
-  local archive_path="$dist_dir/konyak-macos-moltenvk.tar.zst"
-  local source_dylib
-
-  download_if_missing "$moltenvk_url" "$archive_cache" "$moltenvk_sha256"
-  reset_dir "$work_root"
-  mkdir -p "$extract_root" "$payload_root/lib"
-  "$tar_bin" -xf "$archive_cache" -C "$extract_root"
-  source_dylib="$(find "$extract_root" -path '*/dynamic/dylib/macOS/libMoltenVK.dylib' -type f | head -n 1)"
-  if [[ -z "$source_dylib" ]]; then
-    echo "MoltenVK archive does not contain macOS libMoltenVK.dylib." >&2
-    exit 65
-  fi
-
-  cp -f "$source_dylib" "$payload_root/lib/libMoltenVK.dylib"
-  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "moltenvk" "$moltenvk_version"
-  archive_payload "$payload_root" "$archive_path"
-}
-
 package_gstreamer() {
   local payload_root="$dist_dir/work/gstreamer/payload"
   local archive_path="$dist_dir/konyak-macos-gstreamer.tar.zst"
@@ -443,7 +416,6 @@ package_winetricks() {
 }
 
 package_dxvk_macos
-package_moltenvk
 package_gstreamer
 package_freetype
 package_wine_mono
