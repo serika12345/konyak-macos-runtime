@@ -8,7 +8,7 @@ probe_dir="${3:-$repo_root/.dart_tool/backend-probes}"
 timeout_seconds="${KONYAK_BACKEND_SMOKE_TIMEOUT_SECONDS:-180}"
 
 if [[ -z "$runtime_root" || -z "$backend" ]]; then
-  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
+  echo "Usage: $0 <assembled-runtime-root> <dxvk-d3d11|dxmt-d3d11|vkd3d-d3d12|gptk-d3d10-bridge|gptk-d3d11-device|gptk-d3d12-device> [probe-dir]" >&2
   exit 64
 fi
 
@@ -28,6 +28,7 @@ typeset -a dyld_framework_path_entries
 typeset -a wine_path_entries
 typeset -a wine_windows_paths
 typeset -a required_paths
+typeset -a forbidden_paths
 probe_name=""
 probe_runtime_directory=""
 probe_launch_path=""
@@ -84,6 +85,42 @@ case "$backend" in
       "$runtime_root/lib/wine/x86_64-windows/libvkd3d-shader-1.dll"
       "$runtime_root/lib/wine/x86_64-windows/libvkd3d-utils-1.dll"
       "$runtime_root/lib/libMoltenVK.dylib"
+    )
+    ;;
+  gptk-d3d10-bridge)
+    probe_name="d3d10_device_probe.exe"
+    probe_runtime_directory="$runtime_root/lib/wine/x86_64-windows"
+    success_marker="KONYAK_D3D10_DEVICE_PROBE_OK"
+    backend_overrides="dxgi,d3d11,d3d12,nvapi64,nvngx=n,b"
+    dll_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows"
+    )
+    dyld_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix"
+    )
+    dyld_framework_path_entries=(
+      "$runtime_root/components/gptk-d3dmetal/lib/external"
+    )
+    required_paths=(
+      "$runtime_root/lib/wine/x86_64-windows/d3d10.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10_1.dll"
+      "$runtime_root/lib/wine/x86_64-windows/d3d10core.dll"
+      "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/D3DMetal.framework"
+      "$runtime_root/components/gptk-d3dmetal/lib/external/libd3dshared.dylib"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/atidxx64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d11.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d12.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/dxgi.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvapi64.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/nvngx.dll"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/atidxx64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d11.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d12.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/dxgi.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvapi64.so"
+      "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/nvngx.so"
     )
     ;;
   gptk-d3d11-device)
@@ -158,6 +195,13 @@ case "$backend" in
     ;;
 esac
 
+if [[ "$backend" == gptk-* ]]; then
+  forbidden_paths=(
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-windows/d3d10.dll"
+    "$runtime_root/components/gptk-d3dmetal/lib/wine/x86_64-unix/d3d10.so"
+  )
+fi
+
 required_paths=(
   "$wine_executable"
   "$wineserver_executable"
@@ -174,6 +218,13 @@ required_paths=(
 for required_path in "${required_paths[@]}"; do
   if [[ ! -e "$required_path" ]]; then
     echo "Missing backend smoke prerequisite: $required_path" >&2
+    exit 65
+  fi
+done
+
+for forbidden_path in "${forbidden_paths[@]}"; do
+  if [[ -e "$forbidden_path" ]]; then
+    echo "GPTK/D3DMetal smoke must not use active GPTK D3D10 payload: $forbidden_path" >&2
     exit 65
   fi
 done
@@ -237,6 +288,9 @@ print_runtime_diagnostics() {
   for diagnostic_path in \
     "$probe_path" \
     "$runtime_root/lib/libMoltenVK.dylib" \
+    "$runtime_root/lib/wine/x86_64-windows/d3d10.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/d3d10_1.dll" \
+    "$runtime_root/lib/wine/x86_64-windows/d3d10core.dll" \
     "$runtime_root/lib/wine/x86_64-windows/d3d11.dll" \
     "$runtime_root/lib/wine/x86_64-windows/d3d12.dll" \
     "$runtime_root/lib/wine/x86_64-windows/dxgi.dll" \
@@ -301,8 +355,24 @@ is_allowed_gptk_unsupported_host() {
   return 1
 }
 
+is_allowed_gptk_d3d10_bridge_failure() {
+  [[ "$backend" == gptk-d3d10-* ]] || return 1
+  [[ "${KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST:-0}" == "1" ]] || return 1
+
+  log_contains "$stdout_path" "HRESULT DXGID3D10CreateDevice" &&
+    log_contains "$stderr_path" "D3D10CreateDevice failed: 0x80004005"
+}
+
 accept_gptk_unsupported_host() {
   echo "Backend smoke $label reached the CI host's unsupported GPTK/D3DMetal GPU signature." >&2
+  echo "Treating this as an unsupported-host pass because KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1." >&2
+  print_log_excerpt "stdout" "$command_stdout_path"
+  print_log_excerpt "stderr" "$command_stderr_path"
+  exit 0
+}
+
+accept_gptk_d3d10_bridge_failure() {
+  echo "Backend smoke $label reached GPTK's D3D10 bridge entry and returned the expected CI D3D10 E_FAIL signature." >&2
   echo "Treating this as an unsupported-host pass because KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1." >&2
   print_log_excerpt "stdout" "$command_stdout_path"
   print_log_excerpt "stderr" "$command_stderr_path"
@@ -337,9 +407,15 @@ run_wine_with_timeout() {
     if is_allowed_gptk_unsupported_host; then
       accept_gptk_unsupported_host
     fi
+    if is_allowed_gptk_d3d10_bridge_failure; then
+      accept_gptk_d3d10_bridge_failure
+    fi
     if (( SECONDS >= deadline )); then
       if is_allowed_gptk_unsupported_host; then
         accept_gptk_unsupported_host
+      fi
+      if is_allowed_gptk_d3d10_bridge_failure; then
+        accept_gptk_d3d10_bridge_failure
       fi
       echo "Backend smoke $label timed out after ${timeout_seconds}s." >&2
       print_log_excerpt "stdout" "$command_stdout_path"
@@ -357,6 +433,9 @@ run_wine_with_timeout() {
   if (( exit_code != 0 )); then
     if is_allowed_gptk_unsupported_host; then
       accept_gptk_unsupported_host
+    fi
+    if is_allowed_gptk_d3d10_bridge_failure; then
+      accept_gptk_d3d10_bridge_failure
     fi
     echo "Backend smoke $label exited with code $exit_code." >&2
     print_log_excerpt "stdout" "$command_stdout_path"
