@@ -169,30 +169,32 @@ be uploaded as a Konyak artifact.
 The maintained local proof for GPTK4 variant support is:
 
 ```text
-KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH=/Users/masato/Downloads/Game_Porting_Toolkit_4.0_beta_1.dmg \
+KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH="$KONYAK_GPTK4_SOURCE_PATH" \
   ./scripts/smoke-gptk-d3dmetal-local.zsh --allow-unsupported-host \
-  --work-root /tmp/konyak-gptk4-local-smoke \
+  --work-root "$KONYAK_GPTK4_RUNTIME_WORK_ROOT" \
   dist/konyak-macos-wine-runtime-stack.tar.zst
 ```
 
 On 2026-07-06 this detected GPTK4, imported it without `atidxx64.*`, and passed
 `gptk-d3d10-unsupported`, `gptk-d3d11-device`, and `gptk-d3d12-device` against
-the local runtime stack. The matching GPTK3 regression proof is the same local
-smoke command without `KONYAK_GPTK_D3DMETAL_CI_SOURCE_PATH`, which detected the
-pinned Gcenx GPTK3 payload and passed the same smoke targets.
+the local runtime stack. The matching GPTK3 regression proof uses the same
+local smoke command with the runtime work root supplied by the caller, detects
+the pinned Gcenx GPTK3 payload, and passes the same smoke targets.
 
 The maintained parent-repository public CLI proof is:
 
 ```text
+KONYAK_GPTK3_SOURCE_PATH=<user-provided-gptk3-dmg>
+KONYAK_GPTK4_SOURCE_PATH=<user-provided-gptk4-dmg>
 nix develop -c zsh -lc 'just smoke-macos-gptk-import-cli'
 ```
 
 That proof installs a fresh Konyak macOS runtime through
 `install-macos-wine --reinstall --source-manifest ... --json` for each Apple
 payload, then imports GPTK3 through
-`install-gptk-wine --from <Game_Porting_Toolkit_3.x.dmg> --json` and imports
+`install-gptk-wine --from <gptk3-dmg> --json` and imports
 GPTK4 through
-`install-gptk-wine --from <Game_Porting_Toolkit_4.x.dmg> --gptk-version 4 --json`.
+`install-gptk-wine --from <gptk4-dmg> --gptk-version 4 --json`.
 It verifies that `list-runtimes --json` reports the optional
 `gptk-d3dmetal` component and backend as available, that GPTK4 did not install
 legacy `atidxx64.*` payloads, and that the maintained
