@@ -37,6 +37,7 @@
 }:
 
 let
+  konyakBuildRevision = toString (crossoverSource.konyakBuildRevision or 0);
   supportsExternalGptkD3DMetal = stdenv.hostPlatform.isDarwin && stdenv.hostPlatform.isx86_64;
   wineUnixArch = "${stdenv.hostPlatform.parsed.cpu.name}-unix";
   hostedApplicationName = "Konyak Wine Hosted Application";
@@ -52,7 +53,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "konyak-macos-wine-runtime";
-  version = "crossover-${crossoverSource.version}-konyak.0";
+  version = "crossover-${crossoverSource.version}-konyak.${konyakBuildRevision}";
 
   src = fetchurl {
     url = crossoverSource.url;
