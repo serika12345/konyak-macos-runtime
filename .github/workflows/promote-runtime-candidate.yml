@@ -432,9 +432,13 @@ jobs:
           cat > dist/release-notes.md <<EOF
           Konyak macOS runtime ${KONYAK_RUNTIME_RELEASE_TAG}.
 
+          Highlights:
+          - Adds the GPTK4-capable runtime release line while keeping GPTK/D3DMetal payloads external to the runtime archive.
+          - Keeps the D3D10 fallback path aligned with CrossOver-compatible WineD3D/Vulkan behavior.
+          - Publishes after Wine32-on-64, GUI launch, DXVK, DXMT, vkd3d, and CI-only GPTK/D3DMetal smoke verification.
+
           This release was promoted by GitHub Actions from candidate ${CANDIDATE_TAG}
-          after runtime layout, Wine32-on-64, GUI launch, DXVK, DXMT, vkd3d,
-          and CI-only GPTK/D3DMetal smoke verification passed.
+          after runtime layout and smoke verification passed.
           EOF
 
           release_assets=(
@@ -455,6 +459,7 @@ jobs:
           else
             gh release create "$KONYAK_RUNTIME_RELEASE_TAG" "${release_assets[@]}" \
               --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               --title "$KONYAK_RUNTIME_RELEASE_TITLE" \
               --notes-file dist/release-notes.md \
               --latest

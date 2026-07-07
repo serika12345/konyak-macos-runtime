@@ -11,7 +11,8 @@
 }:
 
 let
-  version = "crossover-${crossoverSource.version}-moltenvk-konyak.0";
+  konyakRevision = toString (crossoverSource.konyakRevision or 0);
+  version = "crossover-${crossoverSource.version}-moltenvk-konyak.${konyakRevision}";
   src = fetchurl {
     url = crossoverSource.url;
     hash = crossoverSource.hash;

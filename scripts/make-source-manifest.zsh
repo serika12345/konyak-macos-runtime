@@ -15,6 +15,13 @@ fi
 mkdir -p "$release_dir"
 source_json="$repo_root/sources/crossover.json"
 version="$(jq -r '.version' "$source_json")"
+konyak_revision="$(jq -r '.konyakRevision // 0' "$source_json")"
+case "$konyak_revision" in
+  (''|*[!0-9]*)
+    echo "sources/crossover.json konyakRevision must be a non-negative integer." >&2
+    exit 65
+    ;;
+esac
 archive_name="$(basename "$runtime_archive")"
 sha256="$(shasum -a 256 "$runtime_archive" | awk '{ print $1 }')"
 asset_base_url="${KONYAK_RELEASE_ASSET_BASE_URL:-}"
@@ -31,13 +38,13 @@ component_version() {
       echo "$(jq -r '.version' "$repo_root/sources/dxmt.json")-konyak.0"
       ;;
     vkd3d)
-      echo "crossover-${version}-vkd3d-1.18-konyak.0"
+      echo "crossover-${version}-vkd3d-1.18-konyak.${konyak_revision}"
       ;;
     dxvk-macos)
       echo "v1.10.3-20230507+dxvk-1.10.3-d3d10"
       ;;
     moltenvk)
-      echo "crossover-${version}-moltenvk-konyak.0"
+      echo "crossover-${version}-moltenvk-konyak.${konyak_revision}"
       ;;
     gstreamer)
       echo "nix-gstreamer+plugins"
@@ -75,7 +82,7 @@ components_json="$(
   jq -n \
     --arg archive "$archive_url" \
     --arg sha256 "$sha256" \
-    --arg version "crossover-${version}-konyak.0" \
+    --arg version "crossover-${version}-konyak.${konyak_revision}" \
     '[{
       id: "wine",
       version: $version,
@@ -127,7 +134,7 @@ jq -n \
   }' >"$release_dir/konyak-macos-wine-runtime-stack-source.json"
 
 jq -n \
-  --arg version "crossover-${version}-konyak.0" \
+  --arg version "crossover-${version}-konyak.${konyak_revision}" \
   '{
     schemaVersion: 1,
     appId: "konyak",
