@@ -64,7 +64,7 @@ verification units:
 - FreeType
 - wine-mono
 - wine-gecko
-- winetricks
+- winetricks plus cabextract
 
 Release builds verify Wine32-on-64 in two stages:
 

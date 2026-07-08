@@ -54,7 +54,7 @@ CI may still produce separate internal artifacts for:
 - FreeType;
 - wine-mono;
 - wine-gecko;
-- winetricks.
+- winetricks plus cabextract.
 
 Those internal artifacts are build and verification units. They are not the
 preferred public install shape for the default runtime.

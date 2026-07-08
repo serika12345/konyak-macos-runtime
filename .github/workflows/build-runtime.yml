@@ -365,11 +365,13 @@ jobs:
           gstreamer_plugins_good_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-good.out)"
           gstreamer_plugins_bad_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-bad.out)"
           freetype_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
+          cabextract_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.cabextract)"
           nix shell nixpkgs#gnutar -c \
             ./scripts/package-binary-components.zsh \
               dist \
               "$gstreamer_root" \
               "$freetype_root" \
+              "$cabextract_root" \
               "$gstreamer_root" \
               "$gstreamer_plugins_base_root" \
               "$gstreamer_plugins_good_root" \
