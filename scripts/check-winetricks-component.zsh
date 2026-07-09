@@ -15,9 +15,15 @@ fi
 
 winetricks_path="$runtime_root/winetricks"
 verbs_path="$runtime_root/verbs.txt"
+cabextract_path="$runtime_root/bin/cabextract"
 
 if [[ ! -x "$winetricks_path" ]]; then
   echo "Winetricks executable is missing or not executable: $winetricks_path" >&2
+  exit 65
+fi
+
+if [[ ! -x "$cabextract_path" ]]; then
+  echo "cabextract executable is missing or not executable: $cabextract_path" >&2
   exit 65
 fi
 

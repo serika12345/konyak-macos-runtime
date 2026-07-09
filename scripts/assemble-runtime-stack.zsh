@@ -234,6 +234,7 @@ component_archives=(
 )
 for component_archive in "${component_archives[@]}"; do
   nix shell nixpkgs#gnutar -c tar \
+    --keep-directory-symlink \
     -xaf "$dist_dir/$component_archive" \
     -C "$runtime_root"
   merge_runtime_stack_manifest

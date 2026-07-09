@@ -5,7 +5,8 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 dist_dir="${1:-$repo_root/dist}"
 gstreamer_root="${2:-}"
 freetype_root="${3:-}"
-gstreamer_plugin_roots=("${@:4}")
+cabextract_root="${4:-}"
+gstreamer_plugin_roots=("${@:5}")
 cache_dir="${KONYAK_COMPONENT_DOWNLOAD_CACHE:-$repo_root/.component-cache}"
 
 resolve_gnu_tar() {
@@ -45,12 +46,14 @@ readonly wine_gecko_x86_64_url="https://dl.winehq.org/wine/wine-gecko/2.47.4/win
 readonly wine_gecko_x86_64_sha256="e590b7d988a32d6aa4cf1d8aa3aa3d33766fdd4cf4c89c2dcc2095ecb28d066f"
 
 readonly winetricks_version="20260125"
+readonly winetricks_component_version="${winetricks_version}+cabextract-nix"
 readonly winetricks_url="https://raw.githubusercontent.com/Winetricks/winetricks/20260125/src/winetricks"
 readonly winetricks_sha256="431f82fc74000e6c864409f1d8fb495d696c03928808e3e8acffc45179312a7b"
 
 if [[ -z "$gstreamer_root" || ! -d "$gstreamer_root" ||
-      -z "$freetype_root" || ! -d "$freetype_root" ]]; then
-  echo "Usage: $0 <dist-dir> <gstreamer-root> <freetype-root> [gstreamer-plugin-root ...]" >&2
+      -z "$freetype_root" || ! -d "$freetype_root" ||
+      -z "$cabextract_root" || ! -d "$cabextract_root" ]]; then
+  echo "Usage: $0 <dist-dir> <gstreamer-root> <freetype-root> <cabextract-root> [gstreamer-plugin-root ...]" >&2
   exit 64
 fi
 
@@ -394,12 +397,20 @@ package_winetricks() {
   local script_cache="$cache_dir/winetricks-$winetricks_version"
   local payload_root="$dist_dir/work/winetricks/payload"
   local archive_path="$dist_dir/konyak-macos-winetricks.tar.zst"
+  local cabextract_source="$cabextract_root/bin/cabextract"
 
   download_if_missing "$winetricks_url" "$script_cache" "$winetricks_sha256"
+  if [[ ! -x "$cabextract_source" ]]; then
+    echo "cabextract executable not found in nixpkgs output: $cabextract_source" >&2
+    exit 65
+  fi
+
   reset_dir "$dist_dir/work/winetricks"
   mkdir -p "$payload_root"
   cp -f "$script_cache" "$payload_root/winetricks"
   chmod 0755 "$payload_root/winetricks"
+  copy_nix_executable_closure "$cabextract_source" "$payload_root/bin"
+  chmod 0755 "$payload_root/bin/cabextract"
   WINETRICKS_LATEST_VERSION_CHECK=disabled LANG=C \
     "$payload_root/winetricks" list-all 2>/dev/null |
     awk 'NF >= 2 { print }' >"$payload_root/verbs.txt"
@@ -411,7 +422,7 @@ package_winetricks() {
     echo "winetricks verb catalog does not contain the win10 verb." >&2
     exit 65
   fi
-  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "winetricks" "$winetricks_version"
+  write_stack_manifest "$payload_root/.konyak-runtime-stack.json" "winetricks" "$winetricks_component_version"
   archive_payload "$payload_root" "$archive_path"
 }
 

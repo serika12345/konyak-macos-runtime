@@ -59,7 +59,7 @@ component_version() {
       echo "wine-gecko-2.47.4"
       ;;
     winetricks)
-      echo "20260125"
+      echo "20260125+cabextract-nix"
       ;;
     *)
       echo "unknown"
