@@ -30,6 +30,10 @@ jobs:
       release-tag: ${{ steps.normalize.outputs.release-tag }}
       release-title: ${{ steps.normalize.outputs.release-title }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
       - name: Download candidate release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,7 +124,10 @@ jobs:
             '.components |= map(.archiveUrl = $stack_url | .sha256 = $stack_sha)' \
             candidate/konyak-macos-wine-runtime-stack-source.json \
             > dist/konyak-macos-wine-runtime-stack-source.json
-          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
+          nix shell --inputs-from . \
+            nixpkgs#gnutar nixpkgs#zsh nixpkgs#zstd \
+            -c ./scripts/check-runtime-archive-excludes-gptk.zsh \
+              dist/konyak-macos-wine-runtime-stack.tar.zst
 
           echo "release-tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release-title=Konyak macOS runtime $release_tag" >> "$GITHUB_OUTPUT"
