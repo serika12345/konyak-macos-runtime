@@ -31,14 +31,14 @@ resolve_gnu_tar() {
     return 0
   fi
 
-  echo "GNU tar is required. Run through nix shell nixpkgs#gnutar or install gtar." >&2
+  echo "GNU tar is required. Run through nix shell --inputs-from . nixpkgs#gnutar or install gtar." >&2
   return 1
 }
 
 tar_bin="$(resolve_gnu_tar)" || exit 65
 readonly tar_bin
 
-version="$(nix shell nixpkgs#jq -c jq -r '.version // empty' "$moltenvk_root/build-info.json")"
+version="$(nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -r '.version // empty' "$moltenvk_root/build-info.json")"
 if [[ -z "$version" ]]; then
   echo "MoltenVK build-info.json did not contain a version." >&2
   exit 65
@@ -59,7 +59,7 @@ if [[ -f "$moltenvk_root/SOURCE.txt" ]]; then
   cp -f "$moltenvk_root/SOURCE.txt" "$payload_root/SOURCE.txt"
 fi
 
-nix shell nixpkgs#jq -c jq -n \
+nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -n \
   --arg version "$version" \
   '{
     schemaVersion: 1,

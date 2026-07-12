@@ -4,6 +4,7 @@ set -euo pipefail
 runtime_root="${1:-}"
 timeout_seconds="${KONYAK_WINE32ON64_SMOKE_TIMEOUT_SECONDS:-300}"
 sentinel="KONYAK_WINE32ON64_SMOKE_OK"
+profile_rule_sentinel="KONYAK_PROFILE_CHILD_RULE_OK"
 
 if [[ -z "$runtime_root" || ! -d "$runtime_root" ]]; then
   echo "Usage: $0 <assembled-runtime-root>" >&2
@@ -22,8 +23,10 @@ required_paths=(
   "$prefix_init_executable"
   "$target_executable"
   "$runtime_root/lib/wine/i386-windows/kernel32.dll"
+  "$runtime_root/lib/wine/i386-windows/kernelbase.dll"
   "$runtime_root/lib/wine/i386-windows/ntdll.dll"
   "$runtime_root/lib/wine/x86_64-windows/kernel32.dll"
+  "$runtime_root/lib/wine/x86_64-windows/kernelbase.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64cpu.dll"
   "$runtime_root/lib/wine/x86_64-windows/wow64win.dll"
@@ -61,6 +64,9 @@ exit_status_path="$work_root/exit-status"
 prefix_init_stdout_path="$work_root/prefix-init-stdout.log"
 prefix_init_stderr_path="$work_root/prefix-init-stderr.log"
 prefix_init_exit_status_path="$work_root/prefix-init-exit-status"
+profile_rule_stdout_path="$work_root/profile-rule-stdout.log"
+profile_rule_stderr_path="$work_root/profile-rule-stderr.log"
+profile_rule_exit_status_path="$work_root/profile-rule-exit-status"
 smoke_pid=""
 
 print_log_excerpt() {
@@ -146,6 +152,66 @@ run_wine_with_timeout() {
   fi
 }
 
+wine_windows_path() {
+  local unix_path="$1"
+  local windows_path
+
+  windows_path="${unix_path//\//\\}"
+  printf 'Z:%s\n' "$windows_path"
+}
+
+run_profile_child_process_rule_smoke() {
+  local label="$1"
+  local parent_executable="$2"
+  local base_argument="$3"
+  local existing_argument="$4"
+  local appended_argument="$5"
+  local child_executable child_batch_path child_batch_windows_path normalized_stdout
+
+  child_executable="$(wine_windows_path "$prefix_init_executable")"
+  child_batch_path="$work_root/profile-child-rule.cmd"
+  child_batch_windows_path="$(wine_windows_path "$child_batch_path")"
+  printf '@"%s" /d /c echo %s %s\r\n' \
+    "$child_executable" \
+    "$base_argument" \
+    "$existing_argument" \
+    > "$child_batch_path"
+  export KONYAK_CHILD_PROCESS_RULES=$'CMD.EXE\t'"$existing_argument"$'\nCMD.EXE\t'"$appended_argument"
+
+  run_wine_with_timeout \
+    "$label profile child-process rule" \
+    "$profile_rule_stdout_path" \
+    "$profile_rule_stderr_path" \
+    "$profile_rule_exit_status_path" \
+    "$wine_executable" "$parent_executable" /d /c "$child_batch_windows_path"
+
+  normalized_stdout="$(/usr/bin/tr -d '\r' < "$profile_rule_stdout_path")"
+  if ! print -r -- "$normalized_stdout" |
+    grep -Fx "$base_argument $existing_argument $appended_argument" >/dev/null; then
+    echo "$label did not apply the child-process argument rules exactly once." >&2
+    print_log_excerpt "stdout" "$profile_rule_stdout_path"
+    print_log_excerpt "stderr" "$profile_rule_stderr_path"
+    exit 65
+  fi
+
+  export KONYAK_CHILD_PROCESS_RULES=$'NOT-CMD.EXE\t'"$appended_argument"
+  run_wine_with_timeout \
+    "$label unmatched profile child-process rule" \
+    "$profile_rule_stdout_path" \
+    "$profile_rule_stderr_path" \
+    "$profile_rule_exit_status_path" \
+    "$wine_executable" "$parent_executable" /d /c "$child_batch_windows_path"
+
+  normalized_stdout="$(/usr/bin/tr -d '\r' < "$profile_rule_stdout_path")"
+  if ! print -r -- "$normalized_stdout" |
+    grep -Fx "$base_argument $existing_argument" >/dev/null; then
+    echo "$label applied a child-process argument to a non-matching executable." >&2
+    print_log_excerpt "stdout" "$profile_rule_stdout_path"
+    print_log_excerpt "stderr" "$profile_rule_stderr_path"
+    exit 65
+  fi
+}
+
 stop_smoke_processes() {
   if [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; then
     kill -TERM "$smoke_pid" 2>/dev/null || true
@@ -220,5 +286,21 @@ if ! grep -F "$sentinel" "$stdout_path" >/dev/null; then
   print_log_excerpt "stderr" "$stderr_path"
   exit 65
 fi
+
+run_profile_child_process_rule_smoke \
+  "64-bit parent" \
+  "$prefix_init_executable" \
+  "KONYAK_PROFILE_X64_BASE" \
+  "KONYAK_PROFILE_X64_EXISTING" \
+  "${profile_rule_sentinel}_X64"
+
+run_profile_child_process_rule_smoke \
+  "32-bit parent" \
+  "$target_executable" \
+  "KONYAK_PROFILE_I386_BASE" \
+  "KONYAK_PROFILE_I386_EXISTING" \
+  "${profile_rule_sentinel}_I386"
+
+unset KONYAK_CHILD_PROCESS_RULES
 
 echo "Wine32-on-64 launch smoke OK: $runtime_root"

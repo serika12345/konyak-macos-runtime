@@ -120,7 +120,7 @@ jobs:
             '.components |= map(.archiveUrl = $stack_url | .sha256 = $stack_sha)' \
             candidate/konyak-macos-wine-runtime-stack-source.json \
             > dist/konyak-macos-wine-runtime-stack-source.json
-          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
+          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
 
           echo "release-tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release-title=Konyak macOS runtime $release_tag" >> "$GITHUB_OUTPUT"
@@ -165,7 +165,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wine32on64-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -207,7 +207,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-gui-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -243,7 +243,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-dxvk-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
@@ -280,7 +280,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wined3d-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -316,7 +316,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-dxmt-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
@@ -351,7 +351,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-vkd3d-candidate-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
@@ -388,12 +388,12 @@ jobs:
           probe_root="$RUNNER_TEMP/konyak-gptk-candidate-backend-probes"
           rm -rf "$smoke_runtime_root" "$gptk_work_root" "$probe_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
+          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
-          nix develop -c zsh -lc "nix shell nixpkgs#gnutar -c ./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
+          nix develop -c zsh -lc "nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d10-unsupported $probe_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"

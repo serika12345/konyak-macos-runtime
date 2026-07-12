@@ -20,7 +20,7 @@ resolve_gnu_tar() {
     return 0
   fi
 
-  echo "GNU tar is required. Run through nix shell nixpkgs#gnutar or install gtar." >&2
+  echo "GNU tar is required. Run through nix shell --inputs-from . nixpkgs#gnutar or install gtar." >&2
   return 1
 }
 
