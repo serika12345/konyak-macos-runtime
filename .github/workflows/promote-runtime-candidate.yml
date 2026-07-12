@@ -30,6 +30,10 @@ jobs:
       release-tag: ${{ steps.normalize.outputs.release-tag }}
       release-title: ${{ steps.normalize.outputs.release-title }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v17
+
       - name: Download candidate release assets
         env:
           GH_TOKEN: ${{ github.token }}
