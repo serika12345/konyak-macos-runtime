@@ -286,6 +286,19 @@ if [[ -e "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so" ]]; then
   assert_macho_has_rpath "lib/wine/x86_64-unix/cxcompatdb.so" "@loader_path/"
   assert_macho_uses_dependency "lib/wine/x86_64-unix/cxcompatdb.so" "@rpath/ntdll.so"
 fi
+
+child_process_rule_marker="$(mktemp)"
+trap 'rm -f "$child_process_rule_marker"' EXIT
+printf 'K\0O\0N\0Y\0A\0K\0_\0C\0H\0I\0L\0D\0_\0P\0R\0O\0C\0E\0S\0S\0_\0R\0U\0L\0E\0S\0\0\0' \
+  > "$child_process_rule_marker"
+for architecture in x86_64 i386; do
+  kernelbase_path="$runtime_root/lib/wine/$architecture-windows/kernelbase.dll"
+  if ! LC_ALL=C grep -aFf "$child_process_rule_marker" \
+    "$kernelbase_path" >/dev/null; then
+    echo "$architecture Wine kernelbase is missing the Konyak child-process compatibility hook." >&2
+    exit 1
+  fi
+done
 for host_unix_loader_path in "${host_unix_loader_paths[@]}"; do
   assert_macho_uses_only_system_dependencies "$host_unix_loader_path"
 done

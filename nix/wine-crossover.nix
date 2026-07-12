@@ -136,6 +136,25 @@ stdenv.mkDerivation {
   preConfigure = ''
         export MACOSX_DEPLOYMENT_TARGET=14.0
 
+        cp ${../shims/profile-child-process-rules/konyak_profile_child_process_rules.h} \
+          dlls/kernelbase/konyak_profile_child_process_rules.h
+        substituteInPlace dlls/kernelbase/process.c \
+          --replace-fail '#include "wine/condrv.h"' '#include "wine/condrv.h"
+#include "konyak_profile_child_process_rules.h"'
+        substituteInPlace dlls/kernelbase/process.c \
+          --replace-fail '    /* Warn if unsupported features are used */' '    {
+        WCHAR *konyak_command_line =
+            konyak_child_process_command_line( app_name, tidy_cmdline );
+
+        if (konyak_command_line)
+        {
+            if (tidy_cmdline != cmd_line) HeapFree( GetProcessHeap(), 0, tidy_cmdline );
+            tidy_cmdline = konyak_command_line;
+        }
+    }
+
+    /* Warn if unsupported features are used */'
+
         # Wine embeds loader/wine_info.plist into the Unix host loader that
         # winemac turns into the Cocoa application process. Keep that identity
         # Konyak-owned so AppKit can associate Wine windows with this runtime
