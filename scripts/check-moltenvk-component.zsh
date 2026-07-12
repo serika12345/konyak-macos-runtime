@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 component_root="${1:-}"
 
 if [[ -z "$component_root" || ! -d "$component_root" ]]; then
@@ -51,7 +52,7 @@ fi
 
 if [[ -f "$component_root/.konyak-runtime-stack.json" ]]; then
   version="$(
-    nix shell nixpkgs#jq -c jq -r '.components.moltenvk // empty' \
+    nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -r '.components.moltenvk // empty' \
       "$component_root/.konyak-runtime-stack.json"
   )"
   if [[ -z "$version" ]]; then

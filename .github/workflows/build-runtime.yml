@@ -65,7 +65,7 @@ jobs:
       - name: Capture release version
         id: release-version
         run: |
-          runtime_version="$(nix shell nixpkgs#jq -c ./scripts/runtime-release-version.zsh)"
+          runtime_version="$(nix shell --inputs-from . nixpkgs#jq -c ./scripts/runtime-release-version.zsh)"
           if [ -z "$runtime_version" ] || [ "$runtime_version" = "null" ]; then
             echo "Runtime source metadata did not contain a release version." >&2
             exit 1
@@ -80,25 +80,25 @@ jobs:
         if: success()
         run: |
           runtime_payload_root="$RUNNER_TEMP/konyak-wine-runtime-release-payload"
-          release_version="$(nix shell nixpkgs#jq -c ./scripts/runtime-release-version.zsh)"
+          release_version="$(nix shell --inputs-from . nixpkgs#jq -c ./scripts/runtime-release-version.zsh)"
           rm -rf "$runtime_payload_root"
           mkdir -p "$runtime_payload_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -C result-wine-runtime \
             -cf - \
             . |
-            nix shell nixpkgs#gnutar -c tar \
+            nix shell --inputs-from . nixpkgs#gnutar -c tar \
               -C "$runtime_payload_root" \
               -xf -
           chmod -R u+w "$runtime_payload_root"
-          nix shell nixpkgs#jq -c \
+          nix shell --inputs-from . nixpkgs#jq -c \
             ./scripts/stamp-wine-runtime-release-version.zsh \
               "$runtime_payload_root" \
               "$release_version"
           ./scripts/check-wine32on64-runtime.zsh "$runtime_payload_root"
 
           mkdir -p dist
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             --sort=name \
             --owner=0 \
             --group=0 \
@@ -150,7 +150,7 @@ jobs:
           wine_runtime_root="$RUNNER_TEMP/konyak-dxmt-wine-runtime"
           rm -rf "$wine_runtime_root"
           mkdir -p "$wine_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime.tar.zst \
             -C "$wine_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$wine_runtime_root"
@@ -187,7 +187,7 @@ jobs:
           mkdir -p dist
           mkdir -p dist/dxmt-component/lib/dxmt
           cp -R result-dxmt/. dist/dxmt-component/lib/dxmt/
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             --sort=name \
             --owner=0 \
             --group=0 \
@@ -239,7 +239,7 @@ jobs:
           wine_runtime_root="$RUNNER_TEMP/konyak-vkd3d-wine-runtime"
           rm -rf "$wine_runtime_root"
           mkdir -p "$wine_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime.tar.zst \
             -C "$wine_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$wine_runtime_root"
@@ -263,7 +263,7 @@ jobs:
           cp -R result-vkd3d/x86_64-windows dist/vkd3d-component/lib/wine/
           cp -R result-vkd3d/i386-windows dist/vkd3d-component/lib/wine/
           cp -R result-vkd3d/Licenses/. dist/vkd3d-component/Licenses/
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             --sort=name \
             --owner=0 \
             --group=0 \
@@ -314,7 +314,7 @@ jobs:
         if: success()
         run: |
           mkdir -p dist
-          nix shell nixpkgs#gnutar -c \
+          nix shell --inputs-from . nixpkgs#gnutar -c \
             ./scripts/package-moltenvk-component.zsh \
               result-moltenvk \
               dist
@@ -324,7 +324,7 @@ jobs:
           moltenvk_component_root="$RUNNER_TEMP/konyak-moltenvk-component"
           rm -rf "$moltenvk_component_root"
           mkdir -p "$moltenvk_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-moltenvk.tar.zst \
             -C "$moltenvk_component_root"
           ./scripts/check-moltenvk-component.zsh "$moltenvk_component_root"
@@ -355,18 +355,18 @@ jobs:
 
       - name: Verify Wine addon versions
         run: |
-          nix shell nixpkgs#gnutar -c ./scripts/check-wine-addon-versions.zsh
+          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-wine-addon-versions.zsh
 
       - name: Package binary runtime components
         run: |
           mkdir -p dist
-          gstreamer_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gstreamer.out)"
-          gstreamer_plugins_base_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-base.out)"
-          gstreamer_plugins_good_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-good.out)"
-          gstreamer_plugins_bad_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-bad.out)"
-          freetype_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
-          cabextract_root="$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.cabextract)"
-          nix shell nixpkgs#gnutar -c \
+          gstreamer_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gstreamer.out)"
+          gstreamer_plugins_base_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-base.out)"
+          gstreamer_plugins_good_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-good.out)"
+          gstreamer_plugins_bad_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.gst_all_1.gst-plugins-bad.out)"
+          freetype_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.freetype.out)"
+          cabextract_root="$(nix build --inputs-from . --no-link --print-out-paths nixpkgs#legacyPackages.x86_64-darwin.cabextract)"
+          nix shell --inputs-from . nixpkgs#gnutar -c \
             ./scripts/package-binary-components.zsh \
               dist \
               "$gstreamer_root" \
@@ -382,7 +382,7 @@ jobs:
           dxvk_component_root="$RUNNER_TEMP/konyak-dxvk-component"
           rm -rf "$dxvk_component_root"
           mkdir -p "$dxvk_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-dxvk-macos.tar.zst \
             -C "$dxvk_component_root"
           ./scripts/check-dxvk-component.zsh "$dxvk_component_root"
@@ -392,7 +392,7 @@ jobs:
           gstreamer_component_root="$RUNNER_TEMP/konyak-gstreamer-component"
           rm -rf "$gstreamer_component_root"
           mkdir -p "$gstreamer_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-gstreamer.tar.zst \
             -C "$gstreamer_component_root"
           ./scripts/check-gstreamer-component.zsh "$gstreamer_component_root"
@@ -402,10 +402,10 @@ jobs:
           addon_component_root="$RUNNER_TEMP/konyak-wine-addons-component"
           rm -rf "$addon_component_root"
           mkdir -p "$addon_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-mono.tar.zst \
             -C "$addon_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-gecko.tar.zst \
             -C "$addon_component_root"
           ./scripts/check-wine-addons-component.zsh "$addon_component_root"
@@ -415,7 +415,7 @@ jobs:
           winetricks_component_root="$RUNNER_TEMP/konyak-winetricks-component"
           rm -rf "$winetricks_component_root"
           mkdir -p "$winetricks_component_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-winetricks.tar.zst \
             -C "$winetricks_component_root"
           ./scripts/check-winetricks-component.zsh "$winetricks_component_root"
@@ -499,7 +499,7 @@ jobs:
           ./scripts/check-gstreamer-component.zsh "$runtime_stack_root"
           ./scripts/check-wine-addons-component.zsh "$runtime_stack_root"
           ./scripts/check-winetricks-component.zsh "$runtime_stack_root"
-          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
+          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
 
       - name: Upload runtime stack artifact
         uses: actions/upload-artifact@v4
@@ -569,7 +569,7 @@ jobs:
         run: |
           KONYAK_SINGLE_STACK_ARCHIVE=1 \
           KONYAK_RELEASE_ASSET_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${KONYAK_RUNTIME_RELEASE_TAG}" \
-            nix shell nixpkgs#jq -c \
+            nix shell --inputs-from . nixpkgs#jq -c \
             ./scripts/make-source-manifest.zsh \
               dist \
               dist/konyak-macos-wine-runtime-stack.tar.zst \
@@ -625,7 +625,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wine32on64-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -669,7 +669,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-dxvk-d3d10-d3d11-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-dxvk-component.zsh "$smoke_runtime_root"
@@ -709,7 +709,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-wined3d-d3d10-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -748,7 +748,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-gui-launch-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
@@ -787,7 +787,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-dxmt-d3d11-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-dxmt-component.zsh "$smoke_runtime_root"
@@ -825,7 +825,7 @@ jobs:
           smoke_runtime_root="/tmp/konyak-vkd3d-d3d12-smoke-runtime"
           rm -rf "$smoke_runtime_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
           ./scripts/check-vkd3d-component.zsh "$smoke_runtime_root"
@@ -865,12 +865,12 @@ jobs:
           probe_root="$RUNNER_TEMP/konyak-gptk-d3dmetal-backend-probes"
           rm -rf "$smoke_runtime_root" "$gptk_work_root" "$probe_root"
           mkdir -p "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c tar \
+          nix shell --inputs-from . nixpkgs#gnutar -c tar \
             -xaf dist/konyak-macos-wine-runtime-stack.tar.zst \
             -C "$smoke_runtime_root"
-          nix shell nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
+          nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/check-runtime-archive-excludes-gptk.zsh dist/konyak-macos-wine-runtime-stack.tar.zst
           ./scripts/check-wine32on64-runtime.zsh "$smoke_runtime_root"
-          nix develop -c zsh -lc "nix shell nixpkgs#gnutar -c ./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
+          nix develop -c zsh -lc "nix shell --inputs-from . nixpkgs#gnutar -c ./scripts/prepare-gptk-d3dmetal-ci-smoke.zsh $smoke_runtime_root $gptk_work_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d10-unsupported $probe_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d11-device $probe_root"
           nix develop -c zsh -lc "KONYAK_ALLOW_GPTK_UNSUPPORTED_HOST=1 ./scripts/smoke-backend-device.zsh $smoke_runtime_root gptk-d3d12-device $probe_root"

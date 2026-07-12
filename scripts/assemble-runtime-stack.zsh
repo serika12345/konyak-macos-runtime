@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 dist_dir="${1:-}"
 runtime_root="${2:-}"
 stack_archive="${3:-}"
@@ -64,7 +65,7 @@ merge_component_version() {
   local component_version="$2"
 
   merged_components_json="$(
-    nix shell nixpkgs#jq -c jq -n \
+    nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -n \
       --argjson existing "$merged_components_json" \
       --arg component_id "$component_id" \
       --arg component_version "$component_version" \
@@ -80,7 +81,7 @@ merge_runtime_stack_manifest() {
   fi
 
   merged_components_json="$(
-    nix shell nixpkgs#jq -c jq -n \
+    nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -n \
       --argjson existing "$merged_components_json" \
       --slurpfile manifest "$manifest_path" \
       '$existing * ($manifest[0].components // {})'
@@ -88,7 +89,7 @@ merge_runtime_stack_manifest() {
 }
 
 write_runtime_stack_manifest() {
-  nix shell nixpkgs#jq -c jq -n \
+  nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -n \
     --argjson components "$merged_components_json" \
     '{
       schemaVersion: 1,
@@ -208,13 +209,13 @@ patch_root_darwin_iconv_dependents() {
   done
 }
 
-nix shell nixpkgs#gnutar -c tar \
+nix shell --inputs-from "$repo_root" nixpkgs#gnutar -c tar \
   -xaf "$dist_dir/konyak-macos-wine-runtime.tar.zst" \
   -C "$runtime_root"
 chmod -R u+w "$runtime_root"
 preserve_root_iconv_runtime
 if [[ -f "$runtime_root/build-info.json" ]]; then
-  wine_version="$(nix shell nixpkgs#jq -c jq -r '.version // empty' "$runtime_root/build-info.json")"
+  wine_version="$(nix shell --inputs-from "$repo_root" nixpkgs#jq -c jq -r '.version // empty' "$runtime_root/build-info.json")"
   if [[ -n "$wine_version" ]]; then
     merge_component_version "wine" "$wine_version"
   fi
@@ -233,7 +234,7 @@ component_archives=(
   konyak-macos-winetricks.tar.zst
 )
 for component_archive in "${component_archives[@]}"; do
-  nix shell nixpkgs#gnutar -c tar \
+  nix shell --inputs-from "$repo_root" nixpkgs#gnutar -c tar \
     --keep-directory-symlink \
     -xaf "$dist_dir/$component_archive" \
     -C "$runtime_root"
@@ -248,7 +249,7 @@ echo "Runtime stack assembled: $runtime_root"
 
 if [[ -n "$stack_archive" ]]; then
   rm -f "$stack_archive"
-  nix shell nixpkgs#gnutar -c tar \
+  nix shell --inputs-from "$repo_root" nixpkgs#gnutar -c tar \
     --sort=name \
     --owner=0 \
     --group=0 \
