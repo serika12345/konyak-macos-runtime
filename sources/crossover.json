@@ -1,7 +1,9 @@
 {
   "version": "26.1.0",
-  "konyakBuildRevision": 0,
-  "konyakRevision": 3,
+  "konyakBuildRevision": 1,
+  "konyakRevision": 4,
+  "vkd3dKonyakRevision": 3,
+  "moltenvkKonyakRevision": 3,
   "url": "https://media.codeweavers.com/pub/crossover/source/crossover-sources-26.1.0.tar.gz",
   "hash": "sha256-5OyH1YIaAJ3R8dLjb/4uJLj8uulRY3XqQvlaFpKKuPo="
 }

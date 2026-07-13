@@ -16,12 +16,27 @@ mkdir -p "$release_dir"
 source_json="$repo_root/sources/crossover.json"
 version="$(jq -r '.version' "$source_json")"
 konyak_revision="$(jq -r '.konyakRevision // 0' "$source_json")"
+vkd3d_konyak_revision="$(jq -r '.vkd3dKonyakRevision // .konyakRevision // 0' "$source_json")"
+moltenvk_konyak_revision="$(jq -r '.moltenvkKonyakRevision // .konyakRevision // 0' "$source_json")"
 case "$konyak_revision" in
   (''|*[!0-9]*)
     echo "sources/crossover.json konyakRevision must be a non-negative integer." >&2
     exit 65
     ;;
 esac
+for component_revision_spec in \
+  "vkd3dKonyakRevision=$vkd3d_konyak_revision" \
+  "moltenvkKonyakRevision=$moltenvk_konyak_revision"
+do
+  component_revision_name="${component_revision_spec%%=*}"
+  component_revision="${component_revision_spec#*=}"
+  case "$component_revision" in
+    (''|*[!0-9]*)
+      echo "sources/crossover.json $component_revision_name must be a non-negative integer." >&2
+      exit 65
+      ;;
+  esac
+done
 archive_name="$(basename "$runtime_archive")"
 sha256="$(shasum -a 256 "$runtime_archive" | awk '{ print $1 }')"
 asset_base_url="${KONYAK_RELEASE_ASSET_BASE_URL:-}"
@@ -38,13 +53,13 @@ component_version() {
       echo "$(jq -r '.version' "$repo_root/sources/dxmt.json")-konyak.0"
       ;;
     vkd3d)
-      echo "crossover-${version}-vkd3d-1.18-konyak.${konyak_revision}"
+      echo "crossover-${version}-vkd3d-1.18-konyak.${vkd3d_konyak_revision}"
       ;;
     dxvk-macos)
       echo "v1.10.3-20230507+dxvk-1.10.3-d3d10"
       ;;
     moltenvk)
-      echo "crossover-${version}-moltenvk-konyak.${konyak_revision}"
+      echo "crossover-${version}-moltenvk-konyak.${moltenvk_konyak_revision}"
       ;;
     gstreamer)
       echo "nix-gstreamer+plugins"

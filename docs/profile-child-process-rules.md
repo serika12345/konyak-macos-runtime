@@ -33,9 +33,17 @@ protocol version with matching encoder and parser behavior.
 
 ## Runtime Boundary
 
-The hook runs in Wine's `CreateProcess` path. It does not select applications,
-load a profile database, execute a shell or script, or load external profile
-code. The runtime receives only the validated serialized rules.
+The hook runs in Wine's Unix `ntdll!NtCreateUserProcess` implementation. This
+is the final common process-creation boundary before Wine sends the startup
+parameters to wineserver, including for 32-bit parents under Wine32-on-64.
+Konyak does not patch the PE `kernelbase.dll`, select applications, load a
+profile database, execute a shell or script, or load external profile code.
+The runtime receives only the validated serialized rules.
+
+The command line is replaced only for the duration of `NtCreateUserProcess` and
+the original `RTL_USER_PROCESS_PARAMETERS.CommandLine` is restored before the
+call returns. A rule is ignored if the resulting Windows command line would not
+fit in `UNICODE_STRING`.
 
 This contract is currently implemented only by Konyak's macOS Wine runtime.
 The Linux request builder does not propagate the variable, and the Linux Wine
@@ -43,8 +51,8 @@ runtime does not include the hook.
 
 ## Verification
 
-`scripts/check-wine32on64-runtime.zsh` verifies that both the i386 and x86_64
-`kernelbase.dll` artifacts contain the compiled contract marker.
+`scripts/check-wine32on64-runtime.zsh` verifies that the host Unix `ntdll.so`
+artifact contains the compiled contract marker.
 `scripts/smoke-wine32on64-launch.zsh` then performs real nested `CreateProcess`
 launches with x86_64 and i386 parents. It verifies case-insensitive suffix
 matching, non-matching isolation, exactly-once argument insertion, and the
