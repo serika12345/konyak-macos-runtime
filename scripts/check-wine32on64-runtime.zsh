@@ -287,15 +287,10 @@ if [[ -e "$runtime_root/lib/wine/x86_64-unix/cxcompatdb.so" ]]; then
   assert_macho_uses_dependency "lib/wine/x86_64-unix/cxcompatdb.so" "@rpath/ntdll.so"
 fi
 
-child_process_rule_marker="$(mktemp)"
-trap 'rm -f "$child_process_rule_marker"' EXIT
-printf 'K\0O\0N\0Y\0A\0K\0_\0C\0H\0I\0L\0D\0_\0P\0R\0O\0C\0E\0S\0S\0_\0R\0U\0L\0E\0S\0\0\0' \
-  > "$child_process_rule_marker"
-for architecture in x86_64 i386; do
-  kernelbase_path="$runtime_root/lib/wine/$architecture-windows/kernelbase.dll"
-  if ! LC_ALL=C grep -aFf "$child_process_rule_marker" \
-    "$kernelbase_path" >/dev/null; then
-    echo "$architecture Wine kernelbase is missing the Konyak child-process compatibility hook." >&2
+for host_unix_ntdll_path in "${host_unix_ntdll_paths[@]}"; do
+  if ! LC_ALL=C grep -aF 'KONYAK_CHILD_PROCESS_RULES' \
+    "$runtime_root/$host_unix_ntdll_path" >/dev/null; then
+    echo "$host_unix_ntdll_path is missing the Konyak child-process compatibility hook." >&2
     exit 1
   fi
 done

@@ -15,7 +15,9 @@
 }:
 
 let
-  konyakRevision = toString (crossoverSource.konyakRevision or 0);
+  konyakRevision = toString (
+    crossoverSource.vkd3dKonyakRevision or crossoverSource.konyakRevision or 0
+  );
   version = "crossover-${crossoverSource.version}-vkd3d-1.18-konyak.${konyakRevision}";
   src = fetchurl {
     url = crossoverSource.url;

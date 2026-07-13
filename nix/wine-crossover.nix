@@ -137,23 +137,29 @@ stdenv.mkDerivation {
         export MACOSX_DEPLOYMENT_TARGET=14.0
 
         cp ${../shims/profile-child-process-rules/konyak_profile_child_process_rules.h} \
-          dlls/kernelbase/konyak_profile_child_process_rules.h
-        substituteInPlace dlls/kernelbase/process.c \
-          --replace-fail '#include "wine/condrv.h"' '#include "wine/condrv.h"
+          dlls/ntdll/unix/konyak_profile_child_process_rules.h
+        substituteInPlace dlls/ntdll/unix/process.c \
+          --replace-fail '#include "unix_private.h"' '#include "unix_private.h"
 #include "konyak_profile_child_process_rules.h"'
-        substituteInPlace dlls/kernelbase/process.c \
-          --replace-fail '    /* Warn if unsupported features are used */' '    {
-        WCHAR *konyak_command_line =
-            konyak_child_process_command_line( app_name, tidy_cmdline );
+        substituteInPlace dlls/ntdll/unix/process.c \
+          --replace-fail '    obj_handle_t *handles, *jobs;' '    obj_handle_t *handles, *jobs;
+    struct konyak_child_process_command_line konyak_command_line = {0};'
+        substituteInPlace dlls/ntdll/unix/process.c \
+          --replace-fail '    TRACE( "%s image %s cmdline %s parent %p machine %x\n", debugstr_us( &path ),' '    konyak_apply_child_process_rules( params, &konyak_command_line );
 
-        if (konyak_command_line)
-        {
-            if (tidy_cmdline != cmd_line) HeapFree( GetProcessHeap(), 0, tidy_cmdline );
-            tidy_cmdline = konyak_command_line;
-        }
-    }
-
-    /* Warn if unsupported features are used */'
+    TRACE( "%s image %s cmdline %s parent %p machine %x\n", debugstr_us( &path ),'
+        substituteInPlace dlls/ntdll/unix/process.c \
+          --replace-fail '            free( nt_name.Buffer );
+            return STATUS_SUCCESS;' '            free( nt_name.Buffer );
+            konyak_restore_child_process_command_line( params, &konyak_command_line );
+            return STATUS_SUCCESS;'
+        substituteInPlace dlls/ntdll/unix/process.c \
+          --replace-fail '    free( nt_name.Buffer );
+    return status;
+}' '    free( nt_name.Buffer );
+    konyak_restore_child_process_command_line( params, &konyak_command_line );
+    return status;
+}'
 
         # Wine embeds loader/wine_info.plist into the Unix host loader that
         # winemac turns into the Cocoa application process. Keep that identity

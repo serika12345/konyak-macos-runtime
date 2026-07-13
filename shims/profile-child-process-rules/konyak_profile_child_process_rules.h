@@ -2,31 +2,36 @@
 #define KONYAK_PROFILE_CHILD_PROCESS_RULES_H
 
 /*
- * Konyak profile rules use one line per child argument:
+ * One validated child argument per line:
  *
  *   <executable suffix>\t<argument>\n
  *
- * The parent process owns this environment variable. This hook never runs a
- * shell, loads external code, or selects application-specific behavior.
+ * Konyak selects profiles outside Wine. This hook only applies the serialized
+ * rules at the NtCreateUserProcess boundary and contains no application data.
  */
-#define KONYAK_CHILD_PROCESS_RULES_ENV L"KONYAK_CHILD_PROCESS_RULES"
+#define KONYAK_CHILD_PROCESS_RULES_ENV "KONYAK_CHILD_PROCESS_RULES"
 #define KONYAK_MAX_CHILD_PROCESS_RULE_ARGUMENTS 64
-#define KONYAK_MAX_CHILD_PROCESS_RULES_LENGTH 65536
+#define KONYAK_MAX_CHILD_PROCESS_RULES_UTF8_LENGTH (4 * 65535)
 
-static BOOL konyak_rule_path_ends_with( const WCHAR *path, const WCHAR *suffix )
+struct konyak_child_process_command_line
 {
-    size_t path_length, suffix_length, index;
+    UNICODE_STRING original;
+    WCHAR *buffer;
+};
 
-    if (!path || !suffix || !suffix[0]) return FALSE;
+static BOOL konyak_rule_path_ends_with( const UNICODE_STRING *path, const WCHAR *suffix )
+{
+    SIZE_T path_length, suffix_length, index;
 
-    path_length = lstrlenW( path );
-    suffix_length = lstrlenW( suffix );
+    if (!path || !path->Buffer || !suffix || !suffix[0]) return FALSE;
+
+    path_length = path->Length / sizeof(WCHAR);
+    suffix_length = wcslen( suffix );
     if (path_length < suffix_length) return FALSE;
 
-    path += path_length - suffix_length;
     for (index = 0; index < suffix_length; ++index)
     {
-        WCHAR left = path[index];
+        WCHAR left = path->Buffer[path_length - suffix_length + index];
         WCHAR right = suffix[index];
 
         if (left >= 'A' && left <= 'Z') left += 'a' - 'A';
@@ -41,25 +46,28 @@ static BOOL konyak_rule_command_line_delimiter( WCHAR character )
     return !character || character == ' ' || character == '\t' || character == '"';
 }
 
-static BOOL konyak_rule_command_line_contains( const WCHAR *command_line, const WCHAR *argument )
+static BOOL konyak_rule_command_line_contains( const UNICODE_STRING *command_line,
+                                               const WCHAR *argument )
 {
-    const WCHAR *match = command_line;
-    size_t argument_length;
+    SIZE_T command_length, argument_length, index;
 
-    if (!command_line || !argument || !argument[0]) return FALSE;
+    if (!command_line || !command_line->Buffer || !argument || !argument[0]) return FALSE;
 
-    argument_length = lstrlenW( argument );
-    while ((match = wcsstr( match, argument )))
+    command_length = command_line->Length / sizeof(WCHAR);
+    argument_length = wcslen( argument );
+    if (argument_length > command_length) return FALSE;
+
+    for (index = 0; index + argument_length <= command_length; ++index)
     {
-        WCHAR before = match == command_line ? 0 : match[-1];
-        WCHAR after = match[argument_length];
+        WCHAR before, after;
 
+        if (wcsncmp( command_line->Buffer + index, argument, argument_length )) continue;
+        before = index ? command_line->Buffer[index - 1] : 0;
+        after = index + argument_length < command_length
+            ? command_line->Buffer[index + argument_length] : 0;
         if (konyak_rule_command_line_delimiter( before ) &&
-            konyak_rule_command_line_delimiter( after ))
-            return TRUE;
-        match += argument_length;
+            konyak_rule_command_line_delimiter( after )) return TRUE;
     }
-
     return FALSE;
 }
 
@@ -69,33 +77,33 @@ static BOOL konyak_rule_arguments_contain( const WCHAR *const *arguments, unsign
     unsigned int index;
 
     for (index = 0; index < count; ++index)
-        if (!wcsicmp( arguments[index], candidate )) return TRUE;
+        if (!ntdll_wcsicmp( arguments[index], candidate )) return TRUE;
     return FALSE;
 }
 
-static WCHAR *konyak_child_process_command_line( const WCHAR *application_name,
-                                                  const WCHAR *command_line )
+static void konyak_apply_child_process_rules( RTL_USER_PROCESS_PARAMETERS *params,
+                                              struct konyak_child_process_command_line *state )
 {
+    const char *serialized = getenv( KONYAK_CHILD_PROCESS_RULES_ENV );
     const WCHAR *arguments[KONYAK_MAX_CHILD_PROCESS_RULE_ARGUMENTS];
     WCHAR *rules, *cursor, *line, *result, *write;
-    DWORD required_length, read_length;
+    SIZE_T serialized_length, command_length, result_length;
+    DWORD converted_length;
     unsigned int argument_count = 0, index;
-    size_t result_length;
 
-    if (!application_name || !command_line) return NULL;
+    if (!params || !serialized || !serialized[0]) return;
+    serialized_length = strlen( serialized );
+    if (serialized_length > KONYAK_MAX_CHILD_PROCESS_RULES_UTF8_LENGTH) return;
 
-    required_length = GetEnvironmentVariableW( KONYAK_CHILD_PROCESS_RULES_ENV, NULL, 0 );
-    if (!required_length || required_length > KONYAK_MAX_CHILD_PROCESS_RULES_LENGTH) return NULL;
-    if (!(rules = RtlAllocateHeap( GetProcessHeap(), 0,
-                                  KONYAK_MAX_CHILD_PROCESS_RULES_LENGTH * sizeof(WCHAR) )))
-        return NULL;
-    read_length = GetEnvironmentVariableW( KONYAK_CHILD_PROCESS_RULES_ENV, rules,
-                                           KONYAK_MAX_CHILD_PROCESS_RULES_LENGTH );
-    if (!read_length || read_length >= KONYAK_MAX_CHILD_PROCESS_RULES_LENGTH)
+    if (!(rules = malloc( (serialized_length + 1) * sizeof(WCHAR) ))) return;
+    converted_length = ntdll_umbstowcs( serialized, serialized_length + 1,
+                                        rules, serialized_length + 1 );
+    if (!converted_length || converted_length > serialized_length + 1)
     {
-        RtlFreeHeap( GetProcessHeap(), 0, rules );
-        return NULL;
+        free( rules );
+        return;
     }
+    rules[serialized_length] = 0;
 
     line = rules;
     for (cursor = rules;; ++cursor)
@@ -112,8 +120,8 @@ static WCHAR *konyak_child_process_command_line( const WCHAR *application_name,
             *separator = 0;
             argument = separator + 1;
             if (target[0] && argument[0] &&
-                konyak_rule_path_ends_with( application_name, target ) &&
-                !konyak_rule_command_line_contains( command_line, argument ) &&
+                konyak_rule_path_ends_with( &params->ImagePathName, target ) &&
+                !konyak_rule_command_line_contains( &params->CommandLine, argument ) &&
                 !konyak_rule_arguments_contain( arguments, argument_count, argument ) &&
                 argument_count < KONYAK_MAX_CHILD_PROCESS_RULE_ARGUMENTS)
                 arguments[argument_count++] = argument;
@@ -125,30 +133,48 @@ static WCHAR *konyak_child_process_command_line( const WCHAR *application_name,
 
     if (!argument_count)
     {
-        RtlFreeHeap( GetProcessHeap(), 0, rules );
-        return NULL;
+        free( rules );
+        return;
     }
 
-    result_length = lstrlenW( command_line ) + 1;
+    command_length = params->CommandLine.Length / sizeof(WCHAR);
+    result_length = command_length;
     for (index = 0; index < argument_count; ++index)
-        result_length += lstrlenW( arguments[index] ) + 1;
-    if (!(result = RtlAllocateHeap( GetProcessHeap(), 0, result_length * sizeof(WCHAR) )))
+        result_length += wcslen( arguments[index] ) + 1;
+    if ((result_length + 1) * sizeof(WCHAR) > 0xffff ||
+        !(result = malloc( (result_length + 1) * sizeof(WCHAR) )))
     {
-        RtlFreeHeap( GetProcessHeap(), 0, rules );
-        return NULL;
+        free( rules );
+        return;
     }
 
-    lstrcpyW( result, command_line );
-    write = result + lstrlenW( result );
+    memcpy( result, params->CommandLine.Buffer, params->CommandLine.Length );
+    write = result + command_length;
     for (index = 0; index < argument_count; ++index)
     {
+        SIZE_T argument_length = wcslen( arguments[index] );
+
         *write++ = ' ';
-        lstrcpyW( write, arguments[index] );
-        write += lstrlenW( write );
+        memcpy( write, arguments[index], argument_length * sizeof(WCHAR) );
+        write += argument_length;
     }
+    *write = 0;
 
-    RtlFreeHeap( GetProcessHeap(), 0, rules );
-    return result;
+    state->original = params->CommandLine;
+    state->buffer = result;
+    params->CommandLine.Buffer = result;
+    params->CommandLine.Length = result_length * sizeof(WCHAR);
+    params->CommandLine.MaximumLength = (result_length + 1) * sizeof(WCHAR);
+    free( rules );
+}
+
+static void konyak_restore_child_process_command_line( RTL_USER_PROCESS_PARAMETERS *params,
+                                                       struct konyak_child_process_command_line *state )
+{
+    if (!state->buffer) return;
+    params->CommandLine = state->original;
+    free( state->buffer );
+    state->buffer = NULL;
 }
 
 #endif
